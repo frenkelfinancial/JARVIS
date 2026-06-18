@@ -48,13 +48,27 @@ def ask_jarvis(message, context=""):
     return reply
 
 
+def synthesize_brief(agent_results: dict, period: str) -> str:
+    """Feed all agent outputs to Jarvis and get a 3-5 sentence narrative synthesis."""
+    context = "\n\n".join(
+        f"[{k.upper()}]\n{v}" for k, v in agent_results.items() if v
+    )
+    prompt = (
+        f"It's your {period}. Here's everything your agents just reported:\n\n"
+        f"{context}\n\n"
+        "Give Jace a tight 3-5 sentence take: what's most important right now, "
+        "anything urgent to handle, and one clear action. Direct. No filler. JARVIS mode."
+    )
+    try:
+        return ask_jarvis(prompt)
+    except Exception as e:
+        return f"[Jarvis synthesis unavailable: {e}]"
+
+
 def build_daily_brief(agent_results={}):
-    """
-    Build a morning brief from agent summary strings.
-    No Claude call — agent outputs are already formatted, just concatenate them.
-    """
+    """Plain-text brief for persistence — concatenates all agent outputs."""
     from datetime import datetime
-    header = f"JARVIS BRIEF — {datetime.now():%a %b %-d, %I:%M %p}"
+    header = "JARVIS BRIEF -- " + datetime.now().strftime("%a %b %d, %I:%M %p").replace(" 0", " ")
     if agent_results:
         sections = [v for v in agent_results.values() if v]
         body = "\n\n".join(sections)

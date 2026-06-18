@@ -20,7 +20,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from jarvis import build_daily_brief
+from jarvis import build_daily_brief, synthesize_brief
+from email_report import send_daily_email
 from sms import start_sms_server
 from agents import (
     CommissionAgent,
@@ -110,9 +111,12 @@ def _save_brief(brief: str) -> None:
 
 
 def run_all_agents() -> None:
-    """Run every agent, build a Jarvis brief, SMS it, and persist it."""
+    """Run every agent, synthesize with Jarvis, send email + SMS, persist."""
+    hour = datetime.now().hour
+    period = "Morning Brief" if 6 <= hour < 14 else "Evening Brief"
+
     print(f"\n{'=' * 52}")
-    print(f"  JARVIS FIRING — {datetime.now():%Y-%m-%d %H:%M:%S}")
+    print(f"  JARVIS {period.upper()} -- {datetime.now():%Y-%m-%d %H:%M:%S}")
     print(f"{'=' * 52}\n")
 
     results: dict[str, str] = {}
@@ -124,11 +128,21 @@ def run_all_agents() -> None:
             results[agent.name] = f"{agent.name.upper()}\n  Error: {e}"
         print("  Done.")
 
-    brief = build_daily_brief(agent_results=results)
-    print("\n" + brief + "\n")
+    # Jarvis reads everything and writes a narrative synthesis
+    print(f"[{datetime.now():%H:%M:%S}] Synthesizing with Jarvis...")
+    jarvis_take = synthesize_brief(results, period)
+    print("  Done.")
 
-    _send_sms(brief)
-    _save_brief(brief)
+    # Full HTML report → email
+    send_daily_email(results, jarvis_take, period)
+
+    # Compact SMS — just Jarvis's take
+    sms_body = f"JARVIS {period.upper()} — {datetime.now():%a %b %d}\n\n{jarvis_take}"
+    _send_sms(sms_body)
+
+    # Persist plain-text version
+    plain = build_daily_brief(agent_results=results)
+    _save_brief(plain)
     print("Brief complete.\n")
 
 
@@ -142,9 +156,7 @@ def _threaded(fn):
 
 def _schedule_jobs() -> None:
     schedule.every().day.at("08:00").do(lambda: _threaded(run_all_agents))
-    schedule.every(6).hours.do(lambda: _threaded(leads.run))
-    schedule.every().monday.at("09:00").do(lambda: _threaded(commission.run))
-    schedule.every().day.at("20:00").do(lambda: _threaded(video.run))
+    schedule.every().day.at("20:00").do(lambda: _threaded(run_all_agents))
 
 
 def _scheduler_loop() -> None:
@@ -160,11 +172,9 @@ def main() -> None:
     _schedule_jobs()
 
     print("Jarvis online.")
-    print("  08:00 daily     → all agents + SMS brief")
-    print("  every 6 hours   → leads monitor")
-    print("  Monday 09:00    → commission check")
-    print("  20:00 daily     → video pipeline")
-    print("  SMS webhook     → http://0.0.0.0:5000/sms")
+    print("  08:00 daily  -- morning brief (all agents + email + SMS)")
+    print("  20:00 daily  -- evening brief (all agents + email + SMS)")
+    print("  SMS webhook  -- http://0.0.0.0:5000/sms")
     print("\nPress Ctrl+C to stop.\n")
 
     # SMS webhook server in daemon thread
