@@ -25,6 +25,8 @@ def _write_from_env(env_var: str, path: Path) -> None:
     """Decode a base64 env var and write it to disk if the file isn't already there."""
     value = os.getenv(env_var)
     if value and not path.exists():
+        value = value.strip().replace("\n", "").replace("\r", "").replace(" ", "")
+        value += "=" * (-len(value) % 4)
         path.write_bytes(base64.b64decode(value))
 
 
