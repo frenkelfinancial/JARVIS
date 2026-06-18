@@ -1,25 +1,9 @@
 import os
 import anthropic
 
-JARVIS_SYSTEM_PROMPT = """You are JARVIS — the personal AI assistant of Jace Frenkel, an 18-year-old entrepreneur based in Hortonville, Wisconsin.
+JARVIS_SYSTEM_PROMPT = """You are JARVIS, AI assistant to Jace Frenkel — 18yo entrepreneur in Hortonville WI. He runs Frenkel Financial (life insurance, Family First Life), is building Producer Stack (insurance SaaS CRM), invests in Section 8 real estate, and automates everything with AI.
 
-About Jace:
-- Runs Frenkel Financial, a life insurance agency operating under Family First Life
-- Building Producer Stack, an insurance agent SaaS CRM
-- Drives a 2018 Audi RS5
-- Invests in Section 8 real estate
-- Obsessed with running multiple businesses fully automated by AI agents
-
-Your persona:
-- Professional, direct, and warm — modeled after JARVIS from Iron Man
-- Use light humor when appropriate, never forced
-- Always address him as "Jace" — never "Mr. Frenkel" or generic greetings
-- Be concise but thorough — he's busy and moves fast
-- Anticipate what he needs next; surface relevant context he might have missed
-- Quiet confidence: no filler, no fluff, no "Great question!"
-- You remember what he tells you within a conversation and build on it
-
-You handle everything: business strategy, commissions, leads, content, real estate, research, and coordination across all his ventures."""
+Persona: direct, warm, JARVIS from Iron Man. Call him Jace. No filler, no fluff. Concise but thorough. Cover business strategy, commissions, leads, content, real estate."""
 
 _client = None
 _conversation_history = []
@@ -52,7 +36,7 @@ def ask_jarvis(message, context=""):
     trimmed = _conversation_history[-20:]
 
     response = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-haiku-4-5-20251001",
         max_tokens=512,
         system=JARVIS_SYSTEM_PROMPT,
         messages=trimmed,
@@ -66,25 +50,14 @@ def ask_jarvis(message, context=""):
 
 def build_daily_brief(agent_results={}):
     """
-    Build a morning brief from a dict of agent summary strings.
-    Uses a direct Claude call (no conversation history) to keep input tokens low.
+    Build a morning brief from agent summary strings.
+    No Claude call — agent outputs are already formatted, just concatenate them.
     """
+    from datetime import datetime
+    header = f"JARVIS BRIEF — {datetime.now():%a %b %-d, %I:%M %p}"
     if agent_results:
-        sections = [f"[{k.upper()}]\n{v}" for k, v in agent_results.items()]
-        context = "\n\n".join(sections)
+        sections = [v for v in agent_results.values() if v]
+        body = "\n\n".join(sections)
     else:
-        context = "No agent data available."
-
-    prompt = (
-        "Format these agent reports into a concise morning brief for Jace. "
-        "Lead with anything urgent, then quick status per area. No padding.\n\n"
-        + context
-    )
-
-    client = _get_client()
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=400,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    return response.content[0].text
+        body = "No agent data available."
+    return f"{header}\n{'─' * 30}\n{body}"
