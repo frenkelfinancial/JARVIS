@@ -2,1073 +2,996 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>JARVIS — Bullpen AI Ecosystem</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS — Starship Command</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#0a0a0f;overflow:hidden;font-family:'Courier New',Courier,monospace;color:#e2e8f0}
-canvas{display:block;position:fixed;top:0;left:0;z-index:1}
+:root {
+  --space: #02020c;
+  --hull:  #0b0b1e;
+  --wall:  #13132a;
+  --amber: #d97706;
+  --blue:  #3b82f6;
+  --pink:  #ec4899;
+  --green: #10b981;
+  --purple:#7c3aed;
+  --text:  #c8c8e8;
+  --dim:   #3a3a5a;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:var(--space);color:var(--text);
+  font-family:'Press Start 2P',monospace;overflow:hidden}
 
-/* ── HUD ── */
-#hud{position:fixed;top:0;left:0;right:0;bottom:0;z-index:10;pointer-events:none}
+/* ── TOPBAR ── */
+.topbar{height:54px;background:linear-gradient(90deg,#080818,#0d0d22,#080818);
+  border-bottom:1px solid #1c1c38;display:flex;align-items:center;
+  padding:0 18px;gap:16px;flex-shrink:0;position:relative;z-index:20}
+.brand{color:var(--purple);font-size:12px;display:flex;align-items:center;gap:10px;
+  text-shadow:0 0 14px var(--purple)}
+.brand-orb{width:10px;height:10px;background:var(--purple);
+  box-shadow:0 0 10px var(--purple),0 0 22px var(--purple);
+  animation:orb 1.6s ease-in-out infinite}
+@keyframes orb{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.65)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.tstats{display:flex;gap:22px;margin-left:auto}
+.tstat{display:flex;flex-direction:column;align-items:center;gap:3px}
+.tstat .v{font-size:11px}
+.tstat .l{font-size:7px;color:var(--dim);letter-spacing:2px}
+.clock{font-size:11px;color:#0d9488;min-width:88px;text-align:right}
 
-#hud-title{
-  position:absolute;top:20px;left:24px;
-  color:#7c3aed;font-size:17px;font-weight:bold;letter-spacing:3px;
-  text-shadow:0 0 18px #7c3aed,0 0 40px #4c1d95;
-}
-#hud-sub{
-  position:absolute;top:44px;left:24px;
-  color:#4c1d95;font-size:10px;letter-spacing:2px;
-}
-#hud-clock{
-  position:absolute;top:18px;right:24px;
-  color:#0d9488;font-size:24px;font-weight:bold;letter-spacing:3px;
-  text-shadow:0 0 16px #0d9488;
-}
-#hud-date{
-  position:absolute;top:48px;right:24px;
-  color:#065f46;font-size:10px;letter-spacing:1px;text-align:right;
-}
-#controls-hint{
-  position:absolute;bottom:50px;left:24px;
-  color:#2d2d55;font-size:10px;line-height:1.8;
-}
+/* ── LAYOUT ── */
+.main{display:flex;height:calc(100vh - 54px - 36px)}
 
-/* corner brackets */
-.corner{position:absolute;width:22px;height:22px;border-color:#2d1b69;border-style:solid;opacity:.6}
-.c-tl{top:10px;left:10px;border-width:2px 0 0 2px}
-.c-tr{top:10px;right:10px;border-width:2px 2px 0 0}
-.c-bl{bottom:42px;left:10px;border-width:0 0 2px 2px}
-.c-br{bottom:42px;right:10px;border-width:0 2px 2px 0}
+/* ── LEFT PANEL ── */
+.lpanel{width:230px;background:linear-gradient(180deg,#09091c,#060614);
+  border-right:1px solid #181830;display:flex;flex-direction:column;flex-shrink:0;z-index:5}
+.ptitle{padding:9px 12px;font-size:8px;color:var(--dim);letter-spacing:2px;
+  border-bottom:1px solid #18183a;background:rgba(124,58,237,.04)}
+.roster{flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#1a1a30 transparent}
+
+/* ── AGENT ROW ── */
+.arow{padding:10px 12px;border-bottom:1px solid #0e0e1e;cursor:pointer;
+  position:relative;transition:background .12s}
+.arow:hover{background:rgba(255,255,255,.018)}
+.arow.sel{background:rgba(124,58,237,.06)}
+.arow.sel::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--ac);box-shadow:0 0 6px var(--ac)}
+.ar-top{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+.ar-cv{width:28px;height:38px;image-rendering:pixelated;flex-shrink:0}
+.ar-info{flex:1;min-width:0}
+.ar-name{font-size:9px;color:var(--ac);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ar-role{font-size:7px;color:var(--dim);margin-top:4px}
+.ar-rev{font-size:8px;margin-top:4px;color:var(--ac)}
+.ar-bar-row{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.ar-bar{flex:1;height:4px;background:#0c0c1e}
+.ar-fill{height:100%;transition:width .5s}
+.ar-pct{font-size:7px;color:var(--dim);min-width:26px;text-align:right}
+.ar-st{display:flex;align-items:center;gap:6px;font-size:7px;color:var(--dim)}
+.dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.dot.working{background:var(--green);box-shadow:0 0 5px var(--green);animation:blink 1.1s infinite}
+.dot.processing{background:var(--amber);box-shadow:0 0 5px var(--amber);animation:blink .75s infinite}
+.dot.idle{background:var(--dim)}
+
+.lfooter{border-top:1px solid #18183a;padding:9px 12px;font-size:7px;color:var(--dim)}
+.lfrow{display:flex;justify-content:space-between;line-height:2.6}
+.lfrow span:last-child{color:var(--green)}
+
+/* ── CENTER SPACE ── */
+.center{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+#stars{position:absolute;inset:0;z-index:0}
+
+/* ── SHIP ── */
+.ship-wrap{position:relative;z-index:1;
+  filter:drop-shadow(0 0 40px rgba(124,58,237,.25)) drop-shadow(0 0 80px rgba(124,58,237,.1))}
+.ship{
+  display:grid;
+  grid-template-columns:155px 1fr 155px;
+  grid-template-rows:130px 1fr 130px;
+  gap:4px;padding:10px;
+  width:clamp(420px,calc(100vw - 510px),660px);
+  height:clamp(360px,calc(100vh - 120px),510px);
+  background:linear-gradient(135deg,#0d0d22,#0a0a1a,#0d0d22);
+  clip-path:polygon(18% 0%,82% 0%,100% 18%,100% 82%,82% 100%,18% 100%,0% 82%,0% 18%);
+  position:relative}
+/* cross-hair lines */
+.ship::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(90deg,transparent 49.7%,rgba(124,58,237,.06) 50%,transparent 50.3%),
+             linear-gradient(0deg,transparent 49.7%,rgba(124,58,237,.06) 50%,transparent 50.3%);z-index:0}
+
+/* ── HULL CORNER ── */
+.hcorner{display:flex;align-items:center;justify-content:center;overflow:hidden;
+  background:repeating-linear-gradient(45deg,transparent,transparent 5px,
+    rgba(255,255,255,.012) 5px,rgba(255,255,255,.012) 10px);
+  border:1px solid #141430;position:relative}
+.hcorner .nav{width:6px;height:6px;border-radius:50%;background:#1a1a40;
+  box-shadow:0 0 6px rgba(124,58,237,.4);animation:blink 2.5s infinite}
+
+/* ── ROOMS ── */
+.room{position:relative;border:1px solid #1c1c3a;overflow:hidden;
+  cursor:pointer;transition:border-color .2s,box-shadow .2s;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+  padding-bottom:5px}
+.room:hover{border-color:rgba(255,255,255,.12)}
+.room.sel{border-color:var(--rc);box-shadow:inset 0 0 25px rgba(0,0,0,.3),0 0 12px var(--rc)}
+
+.rleads {background:linear-gradient(160deg,#000d1f,#00091a);--rc:#3b82f6}
+.rcomm  {background:linear-gradient(160deg,#1a0900,#120600);--rc:#d97706}
+.rbridge{background:linear-gradient(160deg,#0d0025,#08001a);--rc:#7c3aed}
+.rshop  {background:linear-gradient(160deg,#001a0b,#001208);--rc:#10b981}
+.rstudio{background:linear-gradient(160deg,#1a0012,#100008);--rc:#ec4899}
+
+/* Room nameplate */
+.rplate{position:absolute;top:6px;left:6px;right:6px;
+  display:flex;justify-content:space-between;align-items:center;z-index:3}
+.rname{font-size:7px;letter-spacing:1px;color:var(--rc);
+  text-shadow:0 0 8px var(--rc);padding:2px 6px;
+  background:rgba(0,0,0,.8);border:1px solid rgba(0,0,0,0);
+  border-image:linear-gradient(90deg,var(--rc),transparent) 1}
+.rrev{font-size:7px;color:var(--rc);background:rgba(0,0,0,.8);
+  padding:2px 6px;border-bottom:1px solid var(--rc)}
+
+/* Room agent canvas */
+.rcv{image-rendering:pixelated;position:relative;z-index:2;
+  filter:drop-shadow(0 2px 6px var(--rc))}
+
+/* ── BRIDGE DECOR ── */
+.bridge-ring{position:absolute;top:38%;left:50%;transform:translate(-50%,-50%);
+  width:55px;height:55px;border:1px solid rgba(124,58,237,.35);border-radius:50%;z-index:1}
+.bridge-ring::before{content:'';position:absolute;inset:-14px;
+  border:1px solid rgba(124,58,237,.15);border-radius:50%}
+.bridge-ring::after{content:'';position:absolute;top:50%;left:50%;
+  width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;
+  background:radial-gradient(circle,rgba(124,58,237,.9),rgba(124,58,237,.2));
+  animation:corepulse 2s ease-in-out infinite}
+@keyframes corepulse{0%,100%{transform:scale(1);opacity:.7}50%{transform:scale(1.4);opacity:1}}
+.bridge-orbit{position:absolute;top:38%;left:50%;transform:translate(-50%,-50%);
+  width:75px;height:75px;border:1px solid rgba(124,58,237,.12);border-radius:50%;
+  animation:orbit 4s linear infinite;z-index:1}
+@keyframes orbit{to{transform:translate(-50%,-50%) rotate(360deg)}}
+.bridge-orbit::after{content:'';position:absolute;top:-3px;left:50%;
+  width:5px;height:5px;border-radius:50%;background:var(--purple);
+  box-shadow:0 0 8px var(--purple)}
+
+/* ── RADAR DECOR (leads) ── */
+.radar{position:absolute;top:35%;left:50%;transform:translate(-50%,-50%);
+  width:48px;height:48px;border:1px solid rgba(59,130,246,.25);border-radius:50%;z-index:1}
+.radar::before{content:'';position:absolute;inset:-12px;
+  border:1px solid rgba(59,130,246,.12);border-radius:50%}
+.radar-sweep{position:absolute;top:50%;left:50%;width:50%;height:1px;
+  background:linear-gradient(90deg,rgba(59,130,246,.9),transparent);
+  transform-origin:left center;animation:sweep 2.8s linear infinite}
+@keyframes sweep{to{transform:rotate(360deg)}}
+.radar-blip{position:absolute;width:3px;height:3px;border-radius:50%;
+  background:#3b82f6;box-shadow:0 0 5px #3b82f6;animation:blipfade 2.8s infinite}
+@keyframes blipfade{0%,100%{opacity:0}40%{opacity:1}60%{opacity:.5}80%{opacity:0}}
+
+/* ── CHART BARS (commission) ── */
+.chartbars{position:absolute;bottom:30px;left:8px;right:8px;height:38px;
+  display:flex;align-items:flex-end;gap:2px;z-index:1}
+.cbar{flex:1;background:rgba(217,119,6,.3);border-top:1px solid rgba(217,119,6,.7)}
+
+/* ── SHELVES (shop) ── */
+.shelf{position:absolute;left:7px;right:7px;height:3px;
+  background:rgba(16,185,129,.25);border-bottom:1px solid rgba(16,185,129,.4);z-index:1}
+.sitem{position:absolute;bottom:100%;width:5px;
+  background:rgba(16,185,129,.22);border:1px solid rgba(16,185,129,.4)}
+
+/* ── STUDIO DECOR ── */
+.cam{position:absolute;top:28%;left:50%;transform:translate(-50%,-50%);
+  width:26px;height:16px;background:rgba(236,72,153,.12);
+  border:1px solid rgba(236,72,153,.3);z-index:1}
+.cam::before{content:'';position:absolute;top:50%;left:-10px;
+  width:10px;height:10px;margin-top:-5px;border-radius:50%;
+  background:rgba(236,72,153,.18);border:1px solid rgba(236,72,153,.5)}
+.spotlight{position:absolute;top:0;right:10px;width:2px;height:26px;
+  background:linear-gradient(180deg,rgba(236,72,153,.7),transparent);z-index:1;
+  animation:spotflick 1.8s ease-in-out infinite}
+@keyframes spotflick{0%,100%{opacity:1}50%{opacity:.55}25%,75%{opacity:.8}}
+
+/* ── RIGHT PANEL ── */
+.rpanel{width:240px;background:linear-gradient(180deg,#09091c,#060614);
+  border-left:1px solid #18183a;display:flex;flex-direction:column;flex-shrink:0;z-index:5}
+.rp-head{padding:9px 12px;background:rgba(124,58,237,.05);
+  border-bottom:1px solid #18183a;font-size:8px;color:var(--dim);letter-spacing:2px}
+.rp-name{font-size:11px;padding:10px 12px 4px;letter-spacing:1px}
+.rp-role{font-size:7px;color:var(--dim);padding:0 12px 9px;border-bottom:1px solid #13132a}
+.rp-metric{padding:8px 12px;border-bottom:1px solid #0e0e1e}
+.rp-ml{font-size:7px;color:var(--dim);letter-spacing:1px;margin-bottom:5px}
+.rp-mv{font-size:13px}
+.rp-sec{padding:7px 12px 5px;font-size:7px;color:var(--dim);letter-spacing:2px;
+  border-bottom:1px solid #13132a}
+.cmds{flex:1;overflow-y:auto;padding:5px 10px;
+  scrollbar-width:thin;scrollbar-color:#1a1a30 transparent}
+.cmd{padding:5px 0;border-bottom:1px solid #0d0d1a;display:flex;gap:7px;align-items:flex-start}
+.ct{font-size:6px;color:var(--dim);min-width:34px;flex-shrink:0;margin-top:2px}
+.cx{font-size:7px;color:var(--text);line-height:1.9}
+.cx.ok{color:var(--green)}.cx.wrn{color:var(--amber)}.cx.new{color:var(--purple)}
 
 /* ── TICKER ── */
-#ticker{
-  position:absolute;bottom:0;left:0;right:0;height:36px;
-  background:rgba(5,5,18,.95);border-top:1px solid #1a1a3a;
-  display:flex;align-items:center;overflow:hidden;
-}
-#ticker-label{
-  background:#7c3aed;color:#fff;font-size:10px;font-weight:bold;
-  letter-spacing:2px;padding:0 14px;height:100%;
-  display:flex;align-items:center;white-space:nowrap;flex-shrink:0;
-}
-#ticker-track{
-  display:flex;align-items:center;
-  animation:tick 55s linear infinite;white-space:nowrap;
-}
-@keyframes tick{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-.t-item{padding:0 36px;color:#64748b;font-size:12px}
-.t-item em{color:#7c3aed;font-style:normal;margin-right:6px}
+.ticker{height:36px;background:#07071a;border-top:1px solid #18183a;
+  display:flex;align-items:center;overflow:hidden;flex-shrink:0}
+.tlbl{background:var(--purple);color:#fff;font-size:8px;padding:0 14px;
+  height:100%;display:flex;align-items:center;flex-shrink:0;letter-spacing:2px}
+.tscroll{display:flex;animation:scrolltick 58s linear infinite;white-space:nowrap}
+@keyframes scrolltick{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.titem{padding:0 24px;font-size:8px;color:var(--dim)}
+.titem em{font-style:normal;margin-right:8px}
 
-/* ── SIDE PANEL ── */
-#panel{
-  position:fixed;top:0;right:-440px;bottom:0;width:420px;
-  background:rgba(4,4,16,.97);border-left:1px solid #1a1a3a;
-  z-index:20;display:flex;flex-direction:column;
-  transition:right .38s cubic-bezier(.4,0,.2,1);
-  pointer-events:all;
-}
-#panel.open{right:0}
-#panel-head{
-  padding:20px 20px 14px;border-bottom:1px solid #1a1a3a;
-  display:flex;justify-content:space-between;align-items:center;
-}
-#panel-title{
-  color:#7c3aed;font-size:12px;font-weight:bold;letter-spacing:2px;
-  text-shadow:0 0 10px #7c3aed;
-}
-#panel-close{
-  background:none;border:none;color:#3b0764;cursor:pointer;
-  font-size:18px;pointer-events:all;transition:color .2s;
-}
-#panel-close:hover{color:#7c3aed}
-#panel-ping{
-  padding:6px 20px;font-size:10px;color:#0d9488;letter-spacing:1px;
-  border-bottom:1px solid #0d1117;
-}
-#panel-body{
-  flex:1;overflow-y:auto;padding:16px 20px;
-  scrollbar-width:thin;scrollbar-color:#1a1a3a transparent;
-}
-.pk{color:#7c3aed;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin:14px 0 4px}
-.pk:first-child{margin-top:0}
-.pv{color:#94a3b8;font-size:12px;line-height:1.65;white-space:pre-wrap;word-break:break-word}
-.prow{
-  border-left:2px solid currentColor;padding-left:10px;margin:6px 0;
-  color:#94a3b8;font-size:12px;line-height:1.5;
-}
+/* scanline overlay */
+.scanlines{position:fixed;inset:0;pointer-events:none;z-index:999;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,
+    rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px)}
+
+/* ── VOICE VISUALIZER ── */
+.viz-wrap{position:absolute;bottom:56px;left:50%;transform:translateX(-50%);
+  display:flex;flex-direction:column;align-items:center;gap:5px;z-index:10;
+  pointer-events:none}
+.viz-bars{display:flex;align-items:flex-end;gap:2px;height:32px}
+.viz-bar{width:3px;border-radius:2px 2px 0 0;background:var(--purple);
+  min-height:2px;transition:height .04s linear}
+.mic-btn{pointer-events:all;width:26px;height:26px;border-radius:50%;
+  background:rgba(124,58,237,.12);border:1px solid rgba(124,58,237,.45);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:11px;transition:all .2s;color:#fff;padding:0;outline:none}
+.mic-btn:hover{background:rgba(124,58,237,.28);box-shadow:0 0 8px rgba(124,58,237,.4)}
+.mic-btn.listening{background:rgba(16,185,129,.18);border-color:#10b981;
+  box-shadow:0 0 12px rgba(16,185,129,.6)}
+.mic-btn.thinking{border-color:var(--purple);animation:blink .5s infinite}
+.mic-btn.speaking{background:rgba(124,58,237,.22);border-color:var(--purple);
+  box-shadow:0 0 14px rgba(124,58,237,.7)}
+.vlabel{pointer-events:none;font-size:6px;color:rgba(124,58,237,.6);letter-spacing:2px}
+
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#1a1a30}
 </style>
 </head>
 <body>
+<div class="scanlines"></div>
 
-<!-- HUD overlay -->
-<div id="hud">
-  <div id="hud-title">▸ BULLPEN AI ECOSYSTEM</div>
-  <div id="hud-sub">JARVIS COMMAND CENTER &nbsp;·&nbsp; FRENKEL FINANCIAL</div>
-  <div id="hud-clock">00:00:00</div>
-  <div id="hud-date">—</div>
-  <div id="controls-hint">
-    DRAG — Orbit &nbsp;|&nbsp; SCROLL — Zoom<br>
-    1–5 — Focus Room &nbsp;|&nbsp; 0 — Overview<br>
-    CLICK — Select Agent
+<div class="topbar">
+  <div class="brand"><div class="brand-orb"></div>⬡ JARVIS STARSHIP</div>
+  <div class="tstats">
+    <div class="tstat"><span class="v" id="sAgents" style="color:#7c3aed">5</span><span class="l">AGENTS</span></div>
+    <div class="tstat"><span class="v" id="sActive" style="color:#10b981">1</span><span class="l">ACTIVE</span></div>
+    <div class="tstat"><span class="v" id="sRevenue" style="color:#d97706">$0</span><span class="l">REVENUE</span></div>
+    <div class="tstat"><span class="v" id="sTasks" style="color:#3b82f6">0</span><span class="l">TASKS</span></div>
+    <div class="tstat"><span class="v" id="sTokens" style="color:#ec4899">0k</span><span class="l">TOKENS</span></div>
   </div>
-  <div class="corner c-tl"></div>
-  <div class="corner c-tr"></div>
-  <div class="corner c-bl"></div>
-  <div class="corner c-br"></div>
+  <div class="clock" id="clock">00:00:00</div>
 </div>
 
-<!-- Ticker -->
-<div id="ticker">
-  <div id="ticker-label">LIVE FEED</div>
-  <div id="ticker-track" id="ticker-track">
-    <span class="t-item"><em>◈ COMMISSION BOT</em>Monitoring carrier emails — Corebridge, Americo, Transamerica feeds active</span>
-    <span class="t-item"><em>◈ LEAD BOT</em>5 new leads need follow-up — pipeline refresh in 6 hours</span>
-    <span class="t-item"><em>◈ VIDEO BOT</em>Generating today's love-story script — ElevenLabs TTS queued</span>
-    <span class="t-item"><em>◈ SHOP BOT</em>3 new Etsy listings drafted — car culture, midwest grind, final expense</span>
-    <span class="t-item"><em>◈ JARVIS</em>All systems nominal. Good morning, Jace. Empire status: optimal.</span>
-    <!-- duplicate for seamless loop -->
-    <span class="t-item"><em>◈ COMMISSION BOT</em>Monitoring carrier emails — Corebridge, Americo, Transamerica feeds active</span>
-    <span class="t-item"><em>◈ LEAD BOT</em>5 new leads need follow-up — pipeline refresh in 6 hours</span>
-    <span class="t-item"><em>◈ VIDEO BOT</em>Generating today's love-story script — ElevenLabs TTS queued</span>
-    <span class="t-item"><em>◈ SHOP BOT</em>3 new Etsy listings drafted — car culture, midwest grind, final expense</span>
-    <span class="t-item"><em>◈ JARVIS</em>All systems nominal. Good morning, Jace. Empire status: optimal.</span>
+<div class="main">
+
+  <!-- LEFT PANEL -->
+  <div class="lpanel">
+    <div class="ptitle">◈ CREW MANIFEST</div>
+    <div class="roster" id="roster"></div>
+    <div class="lfooter">
+      <div class="lfrow"><span>MODEL</span><span>sonnet-4-6</span></div>
+      <div class="lfrow"><span>UPTIME</span><span id="uptime">00:00:00</span></div>
+      <div class="lfrow"><span>STATUS</span><span>OPTIMAL</span></div>
+    </div>
   </div>
+
+  <!-- CENTER -->
+  <div class="center">
+    <canvas id="stars"></canvas>
+    <div class="ship-wrap">
+      <div class="ship" id="ship">
+
+        <!-- Row 1 -->
+        <div class="hcorner"><div class="nav"></div></div>
+
+        <div class="room rleads" id="room-leads" onclick="sel('leads')">
+          <div class="rplate">
+            <span class="rname" style="--rc:#3b82f6">COMMS BAY</span>
+            <span class="rrev" style="--rc:#3b82f6" id="rv-leads">0 leads</span>
+          </div>
+          <div class="radar">
+            <div class="radar-sweep"></div>
+            <div class="radar-blip" style="top:30%;left:60%"></div>
+            <div class="radar-blip" style="top:60%;left:25%;animation-delay:.9s"></div>
+          </div>
+          <canvas class="rcv" style="--rc:#3b82f6" id="rc-leads" width="36" height="48"></canvas>
+        </div>
+
+        <div class="hcorner"><div class="nav" style="animation-delay:.8s"></div></div>
+
+        <!-- Row 2 -->
+        <div class="room rcomm" id="room-commission" onclick="sel('commission')">
+          <div class="rplate">
+            <span class="rname" style="--rc:#d97706">FINANCE</span>
+            <span class="rrev" style="--rc:#d97706" id="rv-commission">$0</span>
+          </div>
+          <div class="chartbars" id="chartbars"></div>
+          <canvas class="rcv" style="--rc:#d97706" id="rc-commission" width="36" height="48"></canvas>
+        </div>
+
+        <div class="room rbridge" id="room-jarvis" onclick="sel('jarvis')">
+          <div class="rplate">
+            <span class="rname" style="--rc:#7c3aed">BRIDGE</span>
+            <span class="rrev" style="--rc:#7c3aed" id="rv-jarvis">0 cmds</span>
+          </div>
+          <div class="bridge-ring"></div>
+          <div class="bridge-orbit"></div>
+          <!-- Voice visualizer -->
+          <div class="viz-wrap">
+            <div class="viz-bars" id="viz-bars"></div>
+            <button class="mic-btn" id="mic-btn"
+              onclick="event.stopPropagation();toggleVoice()">🎤</button>
+            <span class="vlabel" id="vlabel">VOICE</span>
+          </div>
+          <canvas class="rcv" style="--rc:#7c3aed" id="rc-jarvis" width="48" height="64"></canvas>
+        </div>
+
+        <div class="room rshop" id="room-shop" onclick="sel('shop')">
+          <div class="rplate">
+            <span class="rname" style="--rc:#10b981">COMMERCE</span>
+            <span class="rrev" style="--rc:#10b981" id="rv-shop">$0</span>
+          </div>
+          <div id="shopd"></div>
+          <canvas class="rcv" style="--rc:#10b981" id="rc-shop" width="36" height="48"></canvas>
+        </div>
+
+        <!-- Row 3 -->
+        <div class="hcorner"><div class="nav" style="animation-delay:1.4s"></div></div>
+
+        <div class="room rstudio" id="room-video" onclick="sel('video')">
+          <div class="rplate">
+            <span class="rname" style="--rc:#ec4899">STUDIO</span>
+            <span class="rrev" style="--rc:#ec4899" id="rv-video">0 vids</span>
+          </div>
+          <div class="cam"></div>
+          <div class="spotlight"></div>
+          <canvas class="rcv" style="--rc:#ec4899" id="rc-video" width="36" height="48"></canvas>
+        </div>
+
+        <div class="hcorner"><div class="nav" style="animation-delay:2.1s"></div></div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="rpanel">
+    <div class="rp-head">◈ AGENT DETAIL</div>
+    <div class="rp-name" id="rp-name" style="color:#7c3aed">JARVIS</div>
+    <div class="rp-role" id="rp-role">Core Orchestrator</div>
+    <div class="rp-metric">
+      <div class="rp-ml" id="rp-rev-label">COMMANDS DISPATCHED</div>
+      <div class="rp-mv" id="rp-rev" style="color:#7c3aed">0 cmds</div>
+    </div>
+    <div class="rp-metric">
+      <div class="rp-ml" id="rp-tasks-label">TASKS COMPLETED</div>
+      <div class="rp-mv" id="rp-tasks" style="color:#10b981">0</div>
+    </div>
+    <div class="rp-metric">
+      <div class="rp-ml">CURRENT STATUS</div>
+      <div class="rp-mv" id="rp-status" style="font-size:9px;color:#7c3aed">All systems nominal</div>
+    </div>
+    <div class="rp-sec">◈ COMMAND HISTORY</div>
+    <div class="cmds" id="cmds"></div>
+  </div>
+
 </div>
 
-<!-- Side panel -->
-<div id="panel">
-  <div id="panel-head">
-    <div id="panel-title">◈ AGENT STATUS</div>
-    <button id="panel-close" onclick="closePanel()">✕</button>
-  </div>
-  <div id="panel-ping">⬤ &nbsp;CONNECTED — JARVIS MEMORY STORE</div>
-  <div id="panel-body"><div class="pv">Click any agent to view live status...</div></div>
+<div class="ticker">
+  <div class="tlbl">LIVE</div>
+  <div class="tscroll" id="tickerTrack"></div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 'use strict';
 
-// ═══════════════════════════════════════════════════
-//  RENDERER / SCENE / CAMERA
-// ═══════════════════════════════════════════════════
-
-const W = window.innerWidth, H = window.innerHeight;
-
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(W, H);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-document.body.appendChild(renderer.domElement);
-renderer.domElement.style.zIndex = 1;
-
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0a0f);
-scene.fog = new THREE.FogExp2(0x0a0a0f, 0.016);
-
-const camera = new THREE.PerspectiveCamera(24, W / H, 0.1, 300);
-
-// ═══════════════════════════════════════════════════
-//  CAMERA ORBIT (manual — no OrbitControls)
-// ═══════════════════════════════════════════════════
-
-let camTheta  = Math.PI * 0.22;    // azimuth
-let camPhi    = 0.90;               // polar from top
-let camR      = 52;                 // radius
-let camTarget = new THREE.Vector3(0, 1, 0);
-let tgtTheta  = camTheta, tgtPhi = camPhi, tgtR = camR;
-let tgtTarget = new THREE.Vector3(0, 1, 0);
-
-let autoRot    = true;
-let isDrag     = false;
-let didDrag    = false;
-let lastMX     = 0, lastMY = 0;
-
-function syncCamera() {
-  const sx = Math.sin(camPhi), cy = Math.cos(camPhi);
-  camera.position.set(
-    camTarget.x + camR * sx * Math.sin(camTheta),
-    camTarget.y + camR * cy,
-    camTarget.z + camR * sx * Math.cos(camTheta)
-  );
-  camera.lookAt(camTarget);
-}
-syncCamera();
-
-// ═══════════════════════════════════════════════════
-//  COLORS
-// ═══════════════════════════════════════════════════
-
-const C = {
-  commission : 0xd97706,
-  leads      : 0x2563eb,
-  video      : 0xec4899,
-  shop       : 0x10b981,
-  jarvis     : 0x7c3aed,
+// ══════════════════════════════════════════
+//  AGENT DATA
+// ══════════════════════════════════════════
+const AGENTS = {
+  leads:{
+    name:'LEAD BOT',role:'CRM Monitor',color:'#3b82f6',sc:'idle',
+    status:'No CRM configured',prog:0,
+    revFmt:n=>`${n} leads`,rev:0,tasks:0,
+    cmds:[
+      {t:'--:--',x:'Set HUBSPOT_API_KEY in .env to connect',k:'wrn'},
+    ],
+    pool:['Waiting for CRM connection…']
+  },
+  commission:{
+    name:'COMMISSION',role:'Carrier Earnings',color:'#d97706',sc:'idle',
+    status:'No commission records yet',prog:0,
+    revFmt:n=>`$${n.toLocaleString()}`,rev:0,tasks:0,
+    cmds:[
+      {t:'--:--',x:'No carrier commission emails found',k:'wrn'},
+    ],
+    pool:['Awaiting carrier emails…']
+  },
+  jarvis:{
+    name:'JARVIS',role:'Core Orchestrator',color:'#7c3aed',sc:'idle',
+    status:'All systems nominal',prog:100,
+    revFmt:n=>`${n} cmds`,rev:0,tasks:0,
+    cmds:[
+      {t:'--:--',x:'Agents initialized — awaiting real data',k:'ok'},
+      {t:'--:--',x:'Memory sync complete',k:'ok'},
+    ],
+    pool:['Agent dispatched','Memory updated','Health check passed']
+  },
+  shop:{
+    name:'SHOP BOT',role:'Shopify / Etsy',color:'#10b981',sc:'idle',
+    status:'3 listings drafted — no sales yet',prog:0,
+    revFmt:n=>`$${n.toLocaleString()}`,rev:0,tasks:3,
+    cmds:[
+      {t:'14:16',x:'3 Etsy listings drafted (pending upload)',k:'new'},
+      {t:'14:16',x:'Etsy API key invalid — upload failed',k:'wrn'},
+      {t:'14:15',x:'AI generated: JDM, Insurance, Cornfields tees',k:'ok'},
+    ],
+    pool:['Awaiting valid Etsy API key…']
+  },
+  video:{
+    name:'VIDEO BOT',role:'Claude + ElevenLabs',color:'#ec4899',sc:'idle',
+    status:'No videos produced yet',prog:0,
+    revFmt:n=>`${n} vids`,rev:0,tasks:0,
+    cmds:[
+      {t:'--:--',x:'No videos set up yet',k:'wrn'},
+    ],
+    pool:['Waiting for video setup…']
+  }
 };
 
-// ═══════════════════════════════════════════════════
-//  GEOMETRY / MATERIAL HELPERS
-// ═══════════════════════════════════════════════════
+let activeId = 'jarvis';
 
-function lmat(color, emissive, ei) {
-  return new THREE.MeshLambertMaterial({
-    color,
-    emissive: emissive || 0x000000,
-    emissiveIntensity: ei || 0,
+// ══════════════════════════════════════════
+//  PIXEL CHARACTER ART  (12 col × 16 row, S=3)
+//  0=transparent  1=main  2=white/glow  3=accent
+// ══════════════════════════════════════════
+const CHARS = {
+  leads:[
+    [0,0,0,0,0,2,0,0,0,0,0,0],
+    [0,0,0,0,0,1,0,0,0,0,0,0],
+    [0,0,0,0,1,1,1,0,0,0,0,0],
+    [0,0,1,1,1,1,1,1,1,0,0,0],
+    [0,1,1,1,1,1,1,1,1,1,0,0],
+    [2,1,1,2,1,1,1,2,1,1,2,0],
+    [2,1,1,1,3,3,3,1,1,1,2,0],
+    [0,1,1,1,1,1,1,1,1,1,0,0],
+    [0,0,0,1,1,1,1,1,0,0,0,0],
+    [1,1,1,1,1,1,1,1,1,1,0,0],
+    [0,1,3,1,2,1,2,1,3,1,0,0],
+    [0,1,1,1,1,1,1,1,1,1,0,0],
+    [0,0,1,1,1,0,1,1,1,0,0,0],
+    [0,0,1,1,0,0,0,1,1,0,0,0],
+    [0,0,1,1,0,0,0,1,1,0,0,0],
+    [0,1,1,0,0,0,0,0,1,1,0,0],
+  ],
+  commission:[
+    [0,0,0,1,1,1,1,1,0,0,0,0],
+    [0,0,1,1,1,1,1,1,1,0,0,0],
+    [0,0,1,1,1,1,1,1,1,0,0,0],
+    [0,1,1,1,1,1,1,1,1,1,0,0],
+    [0,1,1,2,1,1,1,2,1,1,0,0],
+    [0,1,1,1,1,1,1,1,1,1,0,0],
+    [0,1,1,3,3,3,3,3,1,1,0,0],
+    [0,0,1,1,1,1,1,1,1,0,0,0],
+    [0,0,0,3,1,3,1,3,0,0,0,0],
+    [0,1,1,1,1,1,1,1,1,0,0,0],
+    [0,1,3,1,3,1,3,1,3,1,0,0],
+    [0,1,1,3,1,1,1,3,1,0,3,0],
+    [0,0,1,1,0,0,1,0,0,3,3,0],
+    [0,0,1,1,0,0,1,0,0,3,3,0],
+    [0,0,1,1,0,0,0,0,0,0,0,0],
+    [0,1,1,0,0,0,0,0,0,0,0,0],
+  ],
+  jarvis:[
+    [0,3,0,3,0,0,3,0,3,0,0,0],
+    [0,1,3,1,1,1,1,3,1,0,0,0],
+    [0,1,1,3,1,1,3,1,1,0,0,0],
+    [1,1,1,1,1,1,1,1,1,1,0,0],
+    [1,1,1,1,1,1,1,1,1,1,0,0],
+    [1,1,2,2,1,1,2,2,1,1,0,0],
+    [1,1,1,3,3,3,3,3,1,1,0,0],
+    [1,1,1,1,1,1,1,1,1,1,0,0],
+    [1,0,1,1,1,1,1,1,0,1,0,0],
+    [1,1,1,1,1,1,1,1,1,1,0,0],
+    [0,1,2,2,2,2,2,2,1,0,0,0],
+    [0,1,1,2,3,3,2,1,1,0,0,0],
+    [1,0,1,1,1,1,1,1,0,1,0,0],
+    [1,0,0,1,1,1,1,0,0,1,0,0],
+    [0,0,0,1,1,1,1,0,0,0,0,0],
+    [0,0,0,2,0,0,2,0,0,0,0,0],
+  ],
+  shop:[
+    [0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,1,1,1,1,1,1,0,0,0,0],
+    [0,1,1,1,1,1,1,1,1,0,0,0],
+    [0,1,1,1,1,1,1,1,1,0,0,0],
+    [0,1,2,1,1,1,1,2,1,0,0,0],
+    [0,1,1,3,1,1,3,1,1,0,0,0],
+    [0,0,1,3,3,3,3,3,0,0,0,0],
+    [0,0,0,1,1,1,1,0,0,0,0,0],
+    [0,1,1,1,1,1,1,1,1,0,0,0],
+    [0,3,3,3,3,3,3,3,3,0,0,0],
+    [0,1,3,3,3,3,3,3,1,0,3,0],
+    [0,1,3,1,1,1,1,3,1,0,3,0],
+    [0,0,1,1,0,0,1,1,0,0,0,0],
+    [0,0,1,1,0,0,1,1,0,0,0,0],
+    [0,1,1,0,0,0,0,1,1,0,0,0],
+  ],
+  video:[
+    [0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,1,1,1,1,1,0,0,0,0,0],
+    [0,1,1,1,1,1,1,1,0,0,0,0],
+    [0,1,1,1,1,1,1,1,1,0,0,0],
+    [0,1,2,2,2,1,1,2,1,0,0,0],
+    [0,1,2,3,2,1,1,1,1,0,0,0],
+    [0,1,2,2,2,1,3,1,1,0,0,0],
+    [0,0,1,1,1,1,1,1,0,0,0,0],
+    [0,0,0,1,1,1,1,0,0,0,0,0],
+    [0,1,1,1,1,1,1,1,1,0,0,0],
+    [3,3,1,1,1,1,1,1,0,0,0,0],
+    [3,3,1,1,3,1,1,1,0,0,0,0],
+    [0,0,1,1,1,1,1,1,0,0,0,0],
+    [0,0,1,1,0,0,1,1,0,0,0,0],
+    [0,0,1,1,0,0,1,1,0,0,0,0],
+    [0,1,1,0,0,0,0,1,1,0,0,0],
+  ]
+};
+
+function drawChar(canvas, id, yOff=0) {
+  const ag = AGENTS[id];
+  const grid = CHARS[id];
+  if(!grid) return;
+  const ctx = canvas.getContext('2d');
+  const S = canvas.width / 12;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const hex = ag.color;
+  const [r,g,b] = [parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];
+  const accent = `rgb(${Math.min(255,r*1.6|0)},${Math.min(255,g*1.6|0)},${Math.min(255,b*1.6|0)})`;
+  ctx.save();
+  ctx.translate(0, yOff);
+  grid.forEach((row,ry) => row.forEach((p,cx) => {
+    if(!p) return;
+    ctx.fillStyle = p===1 ? hex : p===2 ? '#fff' : accent;
+    if(p===2 && id==='jarvis') { ctx.shadowColor='#fff'; ctx.shadowBlur=6; }
+    ctx.fillRect(cx*S, ry*S, S, S);
+    ctx.shadowBlur=0;
+  }));
+  ctx.restore();
+}
+
+// ══════════════════════════════════════════
+//  STARFIELD
+// ══════════════════════════════════════════
+function initStars() {
+  const cv = document.getElementById('stars');
+  const ctx = cv.getContext('2d');
+  const stars = Array.from({length:220}, () => ({
+    x: Math.random(), y: Math.random(),
+    r: Math.random()*1.4+.3,
+    ph: Math.random()*Math.PI*2,
+    sp: Math.random()*.4+.2
+  }));
+  function resize() { cv.width=cv.parentElement.clientWidth; cv.height=cv.parentElement.clientHeight; }
+  function draw() {
+    const {width:W, height:H} = cv;
+    ctx.fillStyle='#02020c'; ctx.fillRect(0,0,W,H);
+    const t = Date.now()/1000;
+    stars.forEach(s => {
+      const a = .25 + Math.sin(t*s.sp+s.ph)*.25;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#c8c8e8';
+      ctx.beginPath(); ctx.arc(s.x*W, s.y*H, s.r, 0, Math.PI*2); ctx.fill();
+    });
+    // nebula glow
+    ctx.globalAlpha = 1;
+    const g=ctx.createRadialGradient(W*.25,H*.35,0,W*.25,H*.35,W*.35);
+    g.addColorStop(0,'rgba(124,58,237,.05)'); g.addColorStop(1,'transparent');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    const g2=ctx.createRadialGradient(W*.75,H*.65,0,W*.75,H*.65,W*.3);
+    g2.addColorStop(0,'rgba(59,130,246,.03)'); g2.addColorStop(1,'transparent');
+    ctx.fillStyle=g2; ctx.fillRect(0,0,W,H);
+    requestAnimationFrame(draw);
+  }
+  window.addEventListener('resize', resize);
+  resize(); draw();
+}
+
+// ══════════════════════════════════════════
+//  BUILD LEFT ROSTER
+// ══════════════════════════════════════════
+function buildRoster() {
+  const el = document.getElementById('roster');
+  el.innerHTML = '';
+  Object.entries(AGENTS).forEach(([id, ag]) => {
+    const row = document.createElement('div');
+    row.className = 'arow' + (id===activeId?' sel':'');
+    row.style.setProperty('--ac', ag.color);
+    row.dataset.id = id;
+
+    const cv = document.createElement('canvas');
+    cv.className='ar-cv'; cv.width=28; cv.height=38;
+    drawChar(cv, id);
+
+    row.innerHTML = `
+      <div class="ar-top">
+        <div class="ar-info">
+          <div class="ar-name">${ag.name}</div>
+          <div class="ar-role">${ag.role}</div>
+          <div class="ar-rev" id="lr-${id}">${ag.revFmt(ag.rev)}</div>
+        </div>
+      </div>
+      <div class="ar-bar-row">
+        <div class="ar-bar"><div class="ar-fill" id="lb-${id}" style="width:${ag.prog}%;background:${ag.color}"></div></div>
+        <span class="ar-pct" id="lp-${id}">${ag.prog}%</span>
+      </div>
+      <div class="ar-st"><div class="dot ${ag.sc}"></div><span>${ag.status}</span></div>`;
+    row.querySelector('.ar-top').prepend(cv);
+    row.addEventListener('click', () => sel(id));
+    el.appendChild(row);
   });
 }
-function bmat(color) { return new THREE.MeshBasicMaterial({ color }); }
 
-function mkBox(w, h, d, mat, x, y, z) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-  m.position.set(x || 0, y || 0, z || 0);
-  return m;
-}
-function mkCyl(rt, rb, h, seg, mat, x, y, z) {
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat);
-  m.position.set(x || 0, y || 0, z || 0);
-  return m;
-}
-function mkSph(r, ws, hs, mat, x, y, z) {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(r, ws, hs), mat);
-  m.position.set(x || 0, y || 0, z || 0);
-  return m;
-}
+// ══════════════════════════════════════════
+//  SELECT AGENT
+// ══════════════════════════════════════════
+const REV_LABELS = {
+  commission: 'COMMISSION EARNED',
+  leads:      'LEADS GENERATED',
+  video:      'VIDEOS PRODUCED',
+  shop:       'SHOP REVENUE',
+  jarvis:     'COMMANDS DISPATCHED'
+};
+const TASK_LABELS = {
+  commission: 'STATEMENTS PARSED',
+  leads:      'FOLLOW-UPS SENT',
+  video:      'SCRIPTS COMPLETE',
+  shop:       'LISTINGS CREATED',
+  jarvis:     'TASKS COMPLETED'
+};
 
-// Canvas sprite label
-function makeLabel(text, hexColor, scaleX, scaleY) {
-  const cv = document.createElement('canvas');
-  cv.width = 512; cv.height = 80;
-  const ctx = cv.getContext('2d');
-  // bg
-  ctx.fillStyle = 'rgba(4,4,20,.8)';
-  ctx.beginPath();
-  ctx.roundRect(2, 2, 508, 76, 8);
-  ctx.fill();
-  // border
-  ctx.strokeStyle = hexColor;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.roundRect(2, 2, 508, 76, 8);
-  ctx.stroke();
-  // text
-  ctx.fillStyle = hexColor;
-  ctx.font = 'bold 24px Courier New';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.shadowColor = hexColor;
-  ctx.shadowBlur = 10;
-  ctx.fillText(text, 256, 40);
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: new THREE.CanvasTexture(cv), transparent: true
-  }));
-  sp.scale.set(scaleX || 3.2, scaleY || 0.5, 1);
-  return sp;
+function sel(id) {
+  activeId = id;
+  const ag = AGENTS[id];
+
+  document.querySelectorAll('.arow').forEach(r => r.classList.toggle('sel', r.dataset.id===id));
+  document.querySelectorAll('.room').forEach(r => r.classList.remove('sel'));
+  const room = document.getElementById('room-'+id);
+  if(room) room.classList.add('sel');
+
+  document.getElementById('rp-name').textContent = ag.name;
+  document.getElementById('rp-name').style.color = ag.color;
+  document.getElementById('rp-role').textContent = ag.role;
+
+  document.getElementById('rp-rev-label').textContent = REV_LABELS[id] || 'OUTPUT';
+  document.getElementById('rp-tasks-label').textContent = TASK_LABELS[id] || 'TASKS COMPLETED';
+
+  const rv = ag.revFmt(ag.rev);
+  document.getElementById('rp-rev').textContent = rv;
+  document.getElementById('rp-rev').style.color = ag.color;
+  document.getElementById('rp-tasks').textContent = ag.tasks;
+  document.getElementById('rp-tasks').style.color = ag.color;
+  document.getElementById('rp-status').textContent = ag.status;
+  document.getElementById('rp-status').style.color = ag.color;
+
+  renderCmds();
 }
 
-function makeRoomLabel(text, hexColor) {
-  const cv = document.createElement('canvas');
-  cv.width = 512; cv.height = 80;
-  const ctx = cv.getContext('2d');
-  ctx.fillStyle = hexColor;
-  ctx.font = 'bold 22px Courier New';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.shadowColor = hexColor;
-  ctx.shadowBlur = 18;
-  ctx.fillText(text, 256, 40);
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: new THREE.CanvasTexture(cv), transparent: true
-  }));
-  sp.scale.set(5.5, 0.9, 1);
-  return sp;
+function renderCmds() {
+  const ag = AGENTS[activeId];
+  document.getElementById('cmds').innerHTML = ag.cmds
+    .map(c=>`<div class="cmd"><span class="ct">${c.t}</span><span class="cx ${c.k}">${c.x}</span></div>`)
+    .join('');
 }
 
-// ═══════════════════════════════════════════════════
-//  LIGHTING
-// ═══════════════════════════════════════════════════
-
-scene.add(new THREE.AmbientLight(0x111133, 1.5));
-
-// Sky fill
-const skyLight = new THREE.HemisphereLight(0x0d0d30, 0x050510, 0.8);
-scene.add(skyLight);
-
-const roomLights = [];
-function addRoomLight(color, x, z, intensity, dist) {
-  const l = new THREE.PointLight(color, intensity || 3, dist || 18);
-  l.position.set(x, 6, z);
-  scene.add(l);
-  roomLights.push({ l, base: intensity || 3 });
-  return l;
+// ══════════════════════════════════════════
+//  DECORATIONS
+// ══════════════════════════════════════════
+function buildChartBars() {
+  const el = document.getElementById('chartbars');
+  if(!el) return;
+  [40,62,50,78,58,88,72,55,68,82].forEach(h => {
+    const b=document.createElement('div'); b.className='cbar'; b.style.height=h+'%'; el.appendChild(b);
+  });
 }
 
-const lCommission = addRoomLight(C.commission, -9, -9, 3.5, 20);
-const lLeads      = addRoomLight(C.leads,       9, -9, 3.5, 20);
-const lVideo      = addRoomLight(C.video,       -9,  9, 3.5, 20);
-const lShop       = addRoomLight(C.shop,         9,  9, 3.5, 20);
-const lJarvis     = addRoomLight(C.jarvis,       0,  0, 5.0, 16);
-
-// ═══════════════════════════════════════════════════
-//  BUILDING — FLOOR, WALLS, DIVIDERS
-// ═══════════════════════════════════════════════════
-
-// Main floor
-const floor = new THREE.Mesh(
-  new THREE.BoxGeometry(38, 0.25, 38),
-  lmat(0x0c0c1e)
-);
-floor.position.y = -0.125;
-scene.add(floor);
-
-// Grid
-const grid = new THREE.GridHelper(38, 19, 0x18183a, 0x101028);
-grid.position.y = 0.01;
-scene.add(grid);
-
-// Room zone tint panels
-function zoneTint(color, x, z, w, d) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w || 14, 0.04, d || 14), lmat(color));
-  m.position.set(x, 0.025, z);
-  scene.add(m);
-}
-zoneTint(0x0f0800, -9, -9);  // commission amber
-zoneTint(0x00040e, 9,  -9);  // leads blue
-zoneTint(0x100018,  0,  0, 12, 12); // jarvis purple
-zoneTint(0x0e0010, -9,  9);  // video pink
-zoneTint(0x001208,  9,  9);  // shop green
-
-// Outer perimeter walls
-const wallMat = lmat(0x101025);
-function outerWall(w, h, d, x, z) {
-  const wl = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
-  wl.position.set(x, h / 2, z);
-  scene.add(wl);
-}
-outerWall(38, 3.5, 0.4,  0, -19);
-outerWall(38, 3.5, 0.4,  0,  19);
-outerWall(0.4, 3.5, 38, -19,  0);
-outerWall(0.4, 3.5, 38,  19,  0);
-
-// Room dividers (partial — leave corridors open at x=0 and z=0)
-const divMat = lmat(0x14143a);
-function div(w, h, d, x, z) {
-  const dv = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), divMat);
-  dv.position.set(x, h / 2, z);
-  scene.add(dv);
-}
-// horizontal divider (z = 0 line), gap at center
-div(13, 2.2, 0.3, -10.5, 0);
-div(13, 2.2, 0.3,  10.5, 0);
-// vertical divider (x = 0 line), gap at center
-div(0.3, 2.2, 13, 0, -10.5);
-div(0.3, 2.2, 13, 0,  10.5);
-
-// Ceiling strips (neon accent)
-function ceilStrip(color, x, z, rx) {
-  const s = new THREE.Mesh(
-    new THREE.BoxGeometry(rx ? 0.1 : 12, 0.06, rx ? 12 : 0.1),
-    bmat(color)
-  );
-  s.position.set(x, 3.2, z);
-  scene.add(s);
-}
-ceilStrip(C.commission, -9, -9, false);
-ceilStrip(C.commission, -9, -9, true);
-ceilStrip(C.leads, 9, -9, false);
-ceilStrip(C.leads, 9, -9, true);
-ceilStrip(C.video, -9, 9, false);
-ceilStrip(C.video, -9, 9, true);
-ceilStrip(C.shop, 9, 9, false);
-ceilStrip(C.shop, 9, 9, true);
-
-// ═══════════════════════════════════════════════════
-//  ROOM FURNITURE — COMMISSION  (amber)
-// ═══════════════════════════════════════════════════
-
-const commGrp = new THREE.Group();
-commGrp.position.set(-9, 0, -9);
-
-// Desk surface + legs
-commGrp.add(mkBox(4.5, 0.18, 2, lmat(0x2a1600, C.commission, .06), 0, .95, -1.5));
-[[-1.9, -0.5], [1.9, -0.5], [-1.9, -2.5], [1.9, -2.5]].forEach(([lx, lz]) =>
-  commGrp.add(mkBox(.12, .94, .12, lmat(0x3d2200), lx, .47, lz))
-);
-
-// Monitor (glowing amber screen)
-commGrp.add(mkBox(2.4, 1.5, .07, lmat(0x000000, C.commission, 1.3), 0, 1.85, -2.4));
-commGrp.add(mkBox(.12, .32, .12, lmat(0x1a1000), 0, 1.07, -2.35));
-commGrp.add(mkBox(.6, .06, .4, lmat(0x1a1000), 0, .93, -2.35));
-
-// Chair
-commGrp.add(mkBox(.95, .1, .95, lmat(0x1a1000), 0, .55, -.5));
-commGrp.add(mkBox(.95, .8, .1, lmat(0x1a1000), 0, .95, -.08));
-commGrp.add(mkCyl(.06, .06, .54, 6, lmat(0x3a3a3a), 0, .27, -.5));
-
-// Filing cabinets (3)
-for (let i = 0; i < 3; i++) {
-  const h = 1.6 + i * .35;
-  commGrp.add(mkBox(1.1, h, .85, lmat(0x1a1000, C.commission, .04), 2.8, h / 2, 1.8 + i * .1));
-  for (let j = 0; j < 3; j++) {
-    commGrp.add(mkBox(1, .04, .02, bmat(C.commission), 2.8, .45 + j * .45, 2.25 + i * .1));
-  }
+function buildShopShelves() {
+  const el = document.getElementById('shopd');
+  if(!el) return;
+  [0,1,2].forEach(i => {
+    const s=document.createElement('div'); s.className='shelf';
+    s.style.bottom=(30+i*20)+'px';
+    [0,1,2,3].forEach(j => {
+      const it=document.createElement('div'); it.className='sitem';
+      it.style.left=(6+j*11)+'px';
+      it.style.height=(7+Math.random()*8|0)+'px';
+      s.appendChild(it);
+    });
+    el.appendChild(s);
+  });
 }
 
-// Room label
-const rLabelComm = makeRoomLabel('◈ COMMISSION', '#d97706');
-rLabelComm.position.set(0, 7, -5);
-commGrp.add(rLabelComm);
+// ══════════════════════════════════════════
+//  ANIMATE CHARACTERS (bob)
+// ══════════════════════════════════════════
+let animT=0, lastT2=0;
+const BOB_PHASES = {leads:0, commission:1.2, jarvis:2.4, shop:3.6, video:4.8};
 
-scene.add(commGrp);
-
-// ═══════════════════════════════════════════════════
-//  ROOM FURNITURE — LEADS  (blue)
-// ═══════════════════════════════════════════════════
-
-const leadsGrp = new THREE.Group();
-leadsGrp.position.set(9, 0, -9);
-
-// Desk
-leadsGrp.add(mkBox(4.5, .18, 2, lmat(0x001030, C.leads, .05), 0, .95, -1.5));
-[[-1.9, -.5], [1.9, -.5], [-1.9, -2.5], [1.9, -2.5]].forEach(([lx, lz]) =>
-  leadsGrp.add(mkBox(.12, .94, .12, lmat(0x001840), lx, .47, lz))
-);
-
-// Monitor
-leadsGrp.add(mkBox(2.4, 1.5, .07, lmat(0x000010, C.leads, 1.2), 0, 1.85, -2.4));
-leadsGrp.add(mkBox(.12, .32, .12, lmat(0x001030), 0, 1.07, -2.35));
-
-// Chair
-leadsGrp.add(mkBox(.95, .1, .95, lmat(0x001030), 0, .55, -.5));
-leadsGrp.add(mkBox(.95, .8, .1, lmat(0x001030), 0, .95, -.08));
-leadsGrp.add(mkCyl(.06, .06, .54, 6, lmat(0x3a3a3a), 0, .27, -.5));
-
-// Antenna tower
-const antMat = lmat(0x0a1a40, C.leads, .15);
-leadsGrp.add(mkCyl(.08, .1, 4.5, 8, antMat, -3.5, 2.25, 2));
-leadsGrp.add(mkBox(2, .07, .07, bmat(C.leads), -3.5, 4.0, 2));
-leadsGrp.add(mkBox(.07, .07, 2, bmat(C.leads), -3.5, 4.0, 2));
-leadsGrp.add(mkSph(.14, 8, 8, bmat(C.leads), -3.5, 4.55, 2));
-
-// Signal rings (animated later)
-const signalRings = [];
-for (let i = 0; i < 4; i++) {
-  const rg = new THREE.Mesh(
-    new THREE.TorusGeometry(.8 + i * .6, .04, 8, 40),
-    new THREE.MeshBasicMaterial({ color: C.leads, transparent: true, opacity: .5, wireframe: false })
-  );
-  rg.rotation.x = Math.PI / 2;
-  rg.position.set(-3.5, .8, 2);
-  rg.userData.ringIdx = i;
-  leadsGrp.add(rg);
-  signalRings.push(rg);
+function animLoop(ts) {
+  const dt = Math.min((ts-lastT2)/1000, .05); lastT2=ts; animT+=dt;
+  Object.keys(AGENTS).forEach((id,i) => {
+    const cv = document.getElementById('rc-'+id);
+    if(!cv) return;
+    const yOff = Math.sin(animT*2.2 + BOB_PHASES[id]) * 2.5;
+    drawChar(cv, id, yOff);
+  });
+  requestAnimationFrame(animLoop);
 }
 
-const rLabelLeads = makeRoomLabel('◈ LEADS', '#2563eb');
-rLabelLeads.position.set(0, 7, -5);
-leadsGrp.add(rLabelLeads);
-
-scene.add(leadsGrp);
-
-// ═══════════════════════════════════════════════════
-//  ROOM FURNITURE — VIDEO  (pink)
-// ═══════════════════════════════════════════════════
-
-const videoGrp = new THREE.Group();
-videoGrp.position.set(-9, 0, 9);
-
-// Desk
-videoGrp.add(mkBox(4.5, .18, 2, lmat(0x200010, C.video, .05), 0, .95, -1.5));
-[[-1.9, -.5], [1.9, -.5], [-1.9, -2.5], [1.9, -2.5]].forEach(([lx, lz]) =>
-  videoGrp.add(mkBox(.12, .94, .12, lmat(0x280018), lx, .47, lz))
-);
-
-// Monitor
-videoGrp.add(mkBox(2.4, 1.5, .07, lmat(0x100008, C.video, 1.1), 0, 1.85, -2.4));
-videoGrp.add(mkBox(.12, .32, .12, lmat(0x200010), 0, 1.07, -2.35));
-
-// Chair
-videoGrp.add(mkBox(.95, .1, .95, lmat(0x200010), 0, .55, -.5));
-videoGrp.add(mkBox(.95, .8, .1, lmat(0x200010), 0, .95, -.08));
-videoGrp.add(mkCyl(.06, .06, .54, 6, lmat(0x3a3a3a), 0, .27, -.5));
-
-// Tripod + camera rig
-const tripMat = lmat(0x2a0a1a, C.video, .1);
-[[-0.55, -0.55], [0.55, -0.55], [0, 0.8]].forEach(([lx, lz]) => {
-  const leg = new THREE.Mesh(new THREE.CylinderGeometry(.04, .06, 2.5, 6), tripMat);
-  leg.position.set(-3 + lx, 1.25, 2.5 + lz);
-  leg.rotation.z = lx * .28;
-  leg.rotation.x = -lz * .12;
-  videoGrp.add(leg);
-});
-videoGrp.add(mkBox(1.3, .75, 1.0, lmat(0x150008, C.video, .1), -3, 2.75, 2.5));
-videoGrp.add(mkCyl(.27, .22, .9, 16, lmat(0x040006, C.video, .35), -3, 2.75, 2.0));
-videoGrp.add(mkCyl(.3, .3, .07, 16, bmat(C.video), -3, 2.75, 1.55));
-
-// Clapperboard
-videoGrp.add(mkBox(1.8, 1.3, .09, lmat(0x0a0014, C.video, .15), 3, 2.2, 2.5));
-videoGrp.add(mkBox(1.8, .28, .1, lmat(0x180026, C.video, .5), 3, 2.9, 2.51));
-for (let i = 0; i < 6; i++) {
-  videoGrp.add(mkBox(.22, .24, .11, bmat(i % 2 === 0 ? 0xeeeeee : 0x111111),
-    3 - .75 + i * .3, 2.9, 2.52));
-}
-
-const rLabelVideo = makeRoomLabel('◈ VIDEO', '#ec4899');
-rLabelVideo.position.set(0, 7, 5);
-videoGrp.add(rLabelVideo);
-
-scene.add(videoGrp);
-
-// ═══════════════════════════════════════════════════
-//  ROOM FURNITURE — SHOP  (green)
-// ═══════════════════════════════════════════════════
-
-const shopGrp = new THREE.Group();
-shopGrp.position.set(9, 0, 9);
-
-// Desk
-shopGrp.add(mkBox(4.5, .18, 2, lmat(0x001a08, C.shop, .05), 0, .95, -1.5));
-[[-1.9, -.5], [1.9, -.5], [-1.9, -2.5], [1.9, -2.5]].forEach(([lx, lz]) =>
-  shopGrp.add(mkBox(.12, .94, .12, lmat(0x001a08), lx, .47, lz))
-);
-
-// Monitor
-shopGrp.add(mkBox(2.4, 1.5, .07, lmat(0x000a04, C.shop, 1.1), 0, 1.85, -2.4));
-shopGrp.add(mkBox(.12, .32, .12, lmat(0x001a08), 0, 1.07, -2.35));
-
-// Chair
-shopGrp.add(mkBox(.95, .1, .95, lmat(0x001a08), 0, .55, -.5));
-shopGrp.add(mkBox(.95, .8, .1, lmat(0x001a08), 0, .95, -.08));
-shopGrp.add(mkCyl(.06, .06, .54, 6, lmat(0x3a3a3a), 0, .27, -.5));
-
-// Shelf unit (back wall)
-shopGrp.add(mkBox(.09, 3.5, 1.0, lmat(0x0d1608), -3.8, 1.75, 2.5));
-shopGrp.add(mkBox(.09, 3.5, 1.0, lmat(0x0d1608),  0.8, 1.75, 2.5));
-const prodColors = [C.commission, C.leads, C.video, C.jarvis, C.shop, 0xffffff, 0xff6600, 0x00ccff];
-for (let row = 0; row < 3; row++) {
-  shopGrp.add(mkBox(4.5, .08, 1.0, lmat(0x0d1608), -1.5, .65 + row * 1.1, 2.5));
-  for (let p = 0; p < 7; p++) {
-    const h = .28 + Math.random() * .28;
-    const m = lmat(prodColors[(row * 7 + p) % prodColors.length],
-                   prodColors[(row * 7 + p) % prodColors.length], .12);
-    shopGrp.add(mkBox(.35, h, .38, m, -1.5 - 1.55 + p * .52, .7 + row * 1.1 + h / 2, 2.5));
-  }
-}
-
-const rLabelShop = makeRoomLabel('◈ SHOP', '#10b981');
-rLabelShop.position.set(0, 7, 5);
-shopGrp.add(rLabelShop);
-
-scene.add(shopGrp);
-
-// ═══════════════════════════════════════════════════
-//  JARVIS CORE  (center, purple orb)
-// ═══════════════════════════════════════════════════
-
-const jarvisGrp = new THREE.Group();
-
-// Pedestal
-[
-  [1.5, 1.8, .28, 0, .14, 0],
-  [1.0, 1.3, .22, 0, .36, 0],
-  [.55, .9,  .22, 0, .58, 0],
-  [.2,  .55, .85, 0, 1.08, 0],
-].forEach(([rt, rb, h, x, y, z]) =>
-  jarvisGrp.add(mkCyl(rt, rb, h, 12, lmat(0x0f0020, C.jarvis, .2), x, y, z))
-);
-
-// Orb group (so we can scale for pulse)
-const orbGrp = new THREE.Group();
-orbGrp.position.set(0, 2.7, 0);
-
-const orbCore = mkSph(1.1, 32, 32, bmat(C.jarvis));
-orbGrp.add(orbCore);
-
-// Glow shells
-for (let i = 0; i < 3; i++) {
-  orbGrp.add(mkSph(1.15 + i * .28, 20, 20,
-    new THREE.MeshBasicMaterial({
-      color: C.jarvis, transparent: true,
-      opacity: .07 - i * .02, side: THREE.BackSide
-    })
-  ));
-}
-
-// Wireframe shell
-orbGrp.add(mkSph(1.18, 14, 14,
-  new THREE.MeshBasicMaterial({ color: 0xaa44ff, wireframe: true, transparent: true, opacity: .35 })
-));
-
-jarvisGrp.add(orbGrp);
-
-// Orbital rings
-const orbRings = [];
-[[0, 0, 0], [Math.PI/3, 0, Math.PI/4], [0, Math.PI/2.5, Math.PI/6]].forEach((rot, i) => {
-  const rg = new THREE.Mesh(
-    new THREE.TorusGeometry(2.0 + i * .4, .045, 8, 60),
-    new THREE.MeshBasicMaterial({ color: C.jarvis, transparent: true, opacity: .45 })
-  );
-  rg.position.copy(orbGrp.position);
-  rg.rotation.set(...rot);
-  jarvisGrp.add(rg);
-  orbRings.push(rg);
-});
-
-// Data link beams to rooms (thin vertical cylinders + capped spheres)
-const beamDirs = [
-  { ang: Math.PI * 1.25, color: C.commission },
-  { ang: Math.PI * 0.75, color: C.leads },
-  { ang: Math.PI * 0.25, color: C.shop },
-  { ang: Math.PI * 1.75, color: C.video },
+// ══════════════════════════════════════════
+//  TICKER
+// ══════════════════════════════════════════
+const TICKS = [
+  {a:'COMMISSION', m:'No carrier commission emails found yet — connect Gmail credentials to start tracking', c:'#d97706'},
+  {a:'LEAD BOT',   m:'No CRM connected — set HUBSPOT_API_KEY in .env to track leads',                      c:'#3b82f6'},
+  {a:'VIDEO BOT',  m:'No videos set up yet — configure ElevenLabs key to start producing content',          c:'#ec4899'},
+  {a:'SHOP BOT',   m:'3 Etsy listings drafted — Etsy API key needed to publish | $0 revenue so far',        c:'#10b981'},
+  {a:'JARVIS',     m:'All systems online. Good morning, Jace. Connect your APIs to see real data.',          c:'#7c3aed'},
 ];
-beamDirs.forEach(({ ang, color }) => {
-  const r2 = 6;
-  const bx = Math.sin(ang) * r2, bz = Math.cos(ang) * r2;
-  jarvisGrp.add(mkCyl(.03, .03, 4.5, 5,
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .28 }), bx, 2.5, bz));
-  jarvisGrp.add(mkSph(.15, 8, 8, bmat(color), bx, 4.85, bz));
-});
-
-const rLabelJarvis = makeRoomLabel('◈ JARVIS CORE', '#7c3aed');
-rLabelJarvis.position.set(0, 7.5, 0);
-jarvisGrp.add(rLabelJarvis);
-
-scene.add(jarvisGrp);
-
-// ═══════════════════════════════════════════════════
-//  PARTICLES
-// ═══════════════════════════════════════════════════
-
-const allParticles = [];
-
-function makeParticles(count, spread, color, wx, wz) {
-  const geo = new THREE.BufferGeometry();
-  const pos = new Float32Array(count * 3);
-  const vel = [];
-  for (let i = 0; i < count; i++) {
-    pos[i*3]   = (Math.random() - .5) * spread;
-    pos[i*3+1] = Math.random() * 5.5;
-    pos[i*3+2] = (Math.random() - .5) * spread;
-    vel.push(.25 + Math.random() * .65);
-  }
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const pts = new THREE.Points(geo,
-    new THREE.PointsMaterial({ color, size: .06, transparent: true, opacity: .75 }));
-  pts.position.set(wx, .2, wz);
-  pts.userData.vel = vel;
-  pts.userData.count = count;
-  scene.add(pts);
-  allParticles.push(pts);
+function buildTicker() {
+  const t = document.getElementById('tickerTrack');
+  const items = [...TICKS,...TICKS];
+  t.innerHTML = items.map(i=>`<span class="titem"><em style="color:${i.c}">◈ ${i.a}</em>${i.m}</span>`).join('');
 }
 
-makeParticles(35, 7, C.commission, -9, -9);
-makeParticles(35, 7, C.leads,      9, -9);
-makeParticles(35, 7, C.video,     -9,  9);
-makeParticles(35, 7, C.shop,       9,  9);
-makeParticles(25, 5, C.jarvis,     0,  0);
+// ══════════════════════════════════════════
+//  SIMULATION
+// ══════════════════════════════════════════
+const prg = {commission:0, leads:0, video:0, shop:0, jarvis:100};
 
-// ═══════════════════════════════════════════════════
-//  ROBOT FACTORY
-// ═══════════════════════════════════════════════════
+setInterval(() => {
+  // Revenue display only — no fake increments
 
-function createRobot(color, label, isJarvis) {
-  const grp = new THREE.Group();
-  const dark = new THREE.Color(color).multiplyScalar(.35);
-  const darkHex = (dark.r * 255 << 16) | (dark.g * 255 << 8) | (dark.b * 255 | 0);
-
-  // legs
-  [-.2, .2].forEach(lx =>
-    grp.add(mkBox(.17, .42, .17, lmat(darkHex), lx, .21, 0))
-  );
-
-  // body
-  grp.add(mkBox(.88, .96, .58, lmat(color, color, .14), 0, .9, 0));
-
-  // chest panel
-  grp.add(mkBox(.38, .28, .04, lmat(0x000018, color, .8), 0, .95, .3));
-
-  // neck
-  grp.add(mkBox(.22, .16, .22, lmat(darkHex), 0, 1.42, 0));
-
-  // head (own group for rotation)
-  const head = new THREE.Group();
-  head.position.set(0, 1.62, 0);
-  grp.add(head);
-  grp.userData.head = head;
-
-  head.add(mkBox(.7, .58, .58, lmat(color, color, .1)));
-
-  // eyes
-  const eyeColor = isJarvis ? 0xcc44ff : 0x00f0ff;
-  const eyeR = isJarvis ? .11 : .075;
-  const eyeMat = bmat(eyeColor);
-  const eGeo = new THREE.SphereGeometry(eyeR, 10, 10);
-  [-.18, .18].forEach(ex => {
-    const eye = new THREE.Mesh(eGeo, eyeMat);
-    eye.position.set(ex, .05, .3);
-    head.add(eye);
+  // Progress bars
+  ['commission','leads','video','shop'].forEach(id => {
+    prg[id] = Math.min(100, prg[id]+Math.random()*1.3);
+    if(prg[id]>=100) prg[id]=Math.random()*15;
+    AGENTS[id].prog = prg[id]|0;
+    const b=document.getElementById('lb-'+id), p=document.getElementById('lp-'+id);
+    if(b) b.style.width=prg[id]+'%';
+    if(p) p.textContent=(prg[id]|0)+'%';
   });
 
-  // antenna (Jarvis only)
-  if (isJarvis) {
-    head.add(mkBox(.07, .45, .07, lmat(color, color, .5), 0, .52, 0));
-    head.add(mkSph(.13, 8, 8, bmat(color), 0, .77, 0));
-  }
-
-  // name label
-  const hexStr = '#' + new THREE.Color(color).getHexString();
-  const lbl = makeLabel(label, hexStr, isJarvis ? 3.8 : 3.2, isJarvis ? .55 : .48);
-  lbl.position.set(0, isJarvis ? 3.4 : 2.9, 0);
-  grp.add(lbl);
-
-  if (isJarvis) grp.scale.setScalar(1.6);
-
-  return grp;
-}
-
-// ═══════════════════════════════════════════════════
-//  PLACE ROBOTS
-// ═══════════════════════════════════════════════════
-
-const clickables = [];
-const allRobots  = [];
-
-function placeRobot(color, label, parentGrp, lx, lz, isJarvis, agentKey) {
-  const rb = createRobot(color, label, isJarvis);
-  rb.position.set(lx, 0, lz);
-  rb.userData.agentKey   = agentKey;
-  rb.userData.walkCenterX = lx;
-  rb.userData.walkCenterZ = lz;
-  rb.userData.walkPhase   = Math.random() * Math.PI * 2;
-  rb.userData.walkAxisX   = Math.random() > .5;
-  rb.userData.isJarvis    = isJarvis;
-  parentGrp.add(rb);
-  allRobots.push(rb);
-
-  rb.traverse(child => {
-    if (child.isMesh) {
-      child.userData.robotRef  = rb;
-      child.userData.agentKey  = agentKey;
-      clickables.push(child);
-    }
+  // Revenue labels
+  Object.entries(AGENTS).forEach(([id,ag]) => {
+    const lr=document.getElementById('lr-'+id);
+    const rv=document.getElementById('rv-'+id);
+    const s=ag.revFmt(ag.rev);
+    if(lr) lr.textContent=s;
+    if(rv) rv.textContent=s;
   });
-  return rb;
+
+  // Topbar
+  const totalRev = AGENTS.commission.rev + AGENTS.shop.rev;
+  document.getElementById('sRevenue').textContent = '$'+totalRev.toLocaleString();
+  document.getElementById('sTasks').textContent = AGENTS.jarvis.tasks;
+
+  // Right panel live update
+  if(activeId) {
+    const ag=AGENTS[activeId];
+    document.getElementById('rp-rev').textContent = ag.revFmt(ag.rev);
+    document.getElementById('rp-tasks').textContent = ag.tasks;
+  }
+
+  // Occasionally add a command
+  if(Math.random()<.07 && activeId) {
+    const ag=AGENTS[activeId];
+    ag.cmds.unshift({
+      t: new Date().toTimeString().slice(0,5),
+      x: ag.pool[Math.floor(Math.random()*ag.pool.length)],
+      k: ['ok','new','ok'][Math.floor(Math.random()*3)]
+    });
+    ag.cmds = ag.cmds.slice(0,20);
+    renderCmds();
+  }
+
+  // Animate chart bars
+  document.querySelectorAll('.cbar').forEach(b => {
+    const h = 30+Math.random()*60;
+    b.style.height = h+'%';
+  });
+
+}, 1100);
+
+// ══════════════════════════════════════════
+//  CLOCK / UPTIME
+// ══════════════════════════════════════════
+const t0=Date.now();
+function tick() {
+  const n=new Date();
+  document.getElementById('clock').textContent=n.toTimeString().slice(0,8);
+  const s=((Date.now()-t0)/1000)|0;
+  document.getElementById('uptime').textContent=
+    `${String(s/3600|0).padStart(2,'0')}:${String((s%3600)/60|0).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+}
+setInterval(tick,1000); tick();
+
+let tok=0;
+setInterval(()=>{ document.getElementById('sTokens').textContent=(tok/1000).toFixed(1)+'k'; },3200);
+
+// ══════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════
+buildRoster();
+buildTicker();
+buildChartBars();
+buildShopShelves();
+initStars();
+sel('jarvis');
+requestAnimationFrame(animLoop);
+
+// ══════════════════════════════════════════
+//  VOICE INTERFACE
+// ══════════════════════════════════════════
+const NUM_BARS = 14;
+let audioCtx = null, analyser = null, micSrc = null;
+let mediaRec = null, audioChunks = [], voiceState = 'idle';
+let vizFrame = null;
+
+// Build bars
+(function() {
+  const wrap = document.getElementById('viz-bars');
+  for (let i = 0; i < NUM_BARS; i++) {
+    const b = document.createElement('div');
+    b.className = 'viz-bar';
+    b.style.height = '3px';
+    wrap.appendChild(b);
+  }
+})();
+
+function getCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 64;
+    analyser.connect(audioCtx.destination);
+  }
+  return { audioCtx, analyser };
 }
 
-const rbComm  = placeRobot(C.commission, 'COMMISSION BOT', commGrp,   0, .5, false, 'commission');
-const rbLeads = placeRobot(C.leads,      'LEAD BOT',       leadsGrp,  0, .5, false, 'leads');
-const rbVideo = placeRobot(C.video,      'VIDEO BOT',      videoGrp,  0, .5, false, 'video');
-const rbShop  = placeRobot(C.shop,       'SHOP BOT',       shopGrp,   0, .5, false, 'ecommerce');
-const rbJarvis= placeRobot(C.jarvis,     'JARVIS',         jarvisGrp, 0, -4.5, true, 'brief');
+function setState(s) {
+  voiceState = s;
+  const btn   = document.getElementById('mic-btn');
+  const lbl   = document.getElementById('vlabel');
+  const icons = { idle:'🎤', listening:'⏹', thinking:'···', speaking:'🔊' };
+  const labels= { idle:'VOICE', listening:'LISTENING', thinking:'THINKING', speaking:'SPEAKING' };
+  btn.className = 'mic-btn ' + s;
+  btn.textContent = icons[s];
+  lbl.textContent = labels[s];
+  animateBars(s);
+}
 
-// ═══════════════════════════════════════════════════
-//  RAYCASTING STATE
-// ═══════════════════════════════════════════════════
+function animateBars(state) {
+  if (vizFrame) cancelAnimationFrame(vizFrame);
+  const bars = document.querySelectorAll('.viz-bar');
 
-const raycaster = new THREE.Raycaster();
-const mouse2D   = new THREE.Vector2();
-let hoveredRobot = null;
-
-// ═══════════════════════════════════════════════════
-//  INTERACTION HANDLERS
-// ═══════════════════════════════════════════════════
-
-window.addEventListener('mousedown', e => {
-  isDrag = true; didDrag = false;
-  lastMX = e.clientX; lastMY = e.clientY;
-  autoRot = false;
-});
-
-window.addEventListener('mousemove', e => {
-  if (isDrag) {
-    const dx = e.clientX - lastMX, dy = e.clientY - lastMY;
-    if (Math.abs(dx) + Math.abs(dy) > 3) didDrag = true;
-    tgtTheta -= dx * .007;
-    tgtPhi    = Math.max(.18, Math.min(1.45, tgtPhi + dy * .005));
-    lastMX = e.clientX; lastMY = e.clientY;
+  function frame() {
+    const t = Date.now();
+    if (state === 'idle') {
+      bars.forEach((b, i) => {
+        b.style.height = (3 + Math.abs(Math.sin(t/700 + i * 0.55)) * 5) + 'px';
+        b.style.background = 'rgba(124,58,237,.5)';
+      });
+    } else if (state === 'thinking') {
+      bars.forEach((b, i) => {
+        const v = 4 + Math.sin(t / 180 + i * 0.45) * 10;
+        b.style.height = Math.max(2, v) + 'px';
+        b.style.background = '#7c3aed';
+      });
+    } else if (state === 'listening' || state === 'speaking') {
+      const { analyser: an } = getCtx();
+      const data = new Uint8Array(an.frequencyBinCount);
+      an.getByteFrequencyData(data);
+      const color = state === 'listening' ? '#10b981' : '#7c3aed';
+      const glow  = state === 'listening' ? 'rgba(16,185,129,.8)' : 'rgba(124,58,237,.9)';
+      bars.forEach((b, i) => {
+        const idx = Math.floor(i * data.length / bars.length);
+        const h = 3 + (data[idx] / 255) * 28;
+        b.style.height = h + 'px';
+        b.style.background = h > 12 ? glow : color;
+      });
+    }
+    vizFrame = requestAnimationFrame(frame);
   }
-  // hover detection
-  mouse2D.set(
-    (e.clientX / innerWidth)  *  2 - 1,
-    (e.clientY / innerHeight) * -2 + 1
-  );
-  raycaster.setFromCamera(mouse2D, camera);
-  const hits = raycaster.intersectObjects(clickables);
-  hoveredRobot = hits.length ? (hits[0].object.userData.robotRef || null) : null;
-  document.body.style.cursor = hoveredRobot ? 'pointer' : 'default';
-});
+  vizFrame = requestAnimationFrame(frame);
+}
 
-window.addEventListener('mouseup', e => {
-  isDrag = false;
-  if (!didDrag) {
-    mouse2D.set(
-      (e.clientX / innerWidth)  *  2 - 1,
-      (e.clientY / innerHeight) * -2 + 1
-    );
-    raycaster.setFromCamera(mouse2D, camera);
-    const hits = raycaster.intersectObjects(clickables);
-    if (hits.length) {
-      const key = hits[0].object.userData.agentKey;
-      if (key) selectAgent(key);
+async function toggleVoice() {
+  if (voiceState === 'idle') {
+    try {
+      const { audioCtx: ctx, analyser: an } = getCtx();
+      if (ctx.state === 'suspended') await ctx.resume();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micSrc = ctx.createMediaStreamSource(stream);
+      micSrc.connect(an);
+      audioChunks = [];
+      mediaRec = new MediaRecorder(stream);
+      mediaRec.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+      mediaRec.onstop = () => {
+        micSrc && micSrc.disconnect();
+        stream.getTracks().forEach(t => t.stop());
+        sendAudio();
+      };
+      mediaRec.start();
+      setState('listening');
+    } catch(e) {
+      console.error('Mic error:', e);
+      alert('Microphone access denied. Allow mic in your browser to use voice.');
+    }
+  } else if (voiceState === 'listening') {
+    if (mediaRec && mediaRec.state !== 'inactive') {
+      mediaRec.stop();
+      setState('thinking');
     }
   }
-  setTimeout(() => { autoRot = true; }, 5000);
-});
-
-window.addEventListener('wheel', e => {
-  tgtR = Math.max(18, Math.min(90, tgtR + e.deltaY * .06));
-  autoRot = false;
-  setTimeout(() => { autoRot = true; }, 3000);
-}, { passive: true });
-
-// Keyboard 0-5
-const VIEWS = {
-  '1': { th: Math.PI * 1.22, ph: .72, tx: -9, ty: 2, tz: -9, key: 'commission' },
-  '2': { th: Math.PI * 0.78, ph: .72, tx:  9, ty: 2, tz: -9, key: 'leads' },
-  '3': { th: Math.PI * 0.22, ph: .62, tx:  0, ty: 3, tz:  0, key: 'brief' },
-  '4': { th: Math.PI * 1.78, ph: .72, tx: -9, ty: 2, tz:  9, key: 'video' },
-  '5': { th: Math.PI * 0.22, ph: .72, tx:  9, ty: 2, tz:  9, key: 'ecommerce' },
-  '0': { th: Math.PI * 0.22, ph: .90, tx:  0, ty: 1, tz:  0, key: null },
-};
-window.addEventListener('keydown', e => {
-  const v = VIEWS[e.key];
-  if (!v) return;
-  tgtTheta = v.th; tgtPhi = v.ph; tgtR = 38;
-  tgtTarget.set(v.tx, v.ty, v.tz);
-  autoRot = false;
-  if (v.key) selectAgent(v.key);
-  setTimeout(() => { autoRot = true; }, 8000);
-});
-
-// ═══════════════════════════════════════════════════
-//  SIDE PANEL
-// ═══════════════════════════════════════════════════
-
-const AGENT_META = {
-  commission : { label: 'COMMISSION BOT', color: '#d97706' },
-  leads      : { label: 'LEAD BOT',       color: '#2563eb' },
-  video      : { label: 'VIDEO BOT',      color: '#ec4899' },
-  ecommerce  : { label: 'SHOP BOT',       color: '#10b981' },
-  brief      : { label: 'JARVIS CORE',    color: '#7c3aed' },
-};
-const DEMO = {
-  commission: 'Monitoring carrier commission emails.\nCorebridge · Americo · Transamerica · AmAm\nLast net: $3,240.00 commissions tracked.',
-  leads:      '5 new leads this week.\nHubSpot / GoHighLevel sync active.\nWarm pipeline: 3 prospects pending follow-up.',
-  video:      'Script queue: 2 pending.\nElevenLabs TTS synthesis ready.\nLatest: "A Love Story in 60 Seconds".',
-  ecommerce:  '3 Etsy listings drafted.\n• Midwest Grind Tee — $27.99\n• RS5 Culture Shirt — $29.99\n• Final Expense Tee — $24.99\nStatus: pending upload.',
-  brief:      'All systems nominal.\nGood morning, Jace.\nEmpire status: optimal. 5 agents active.',
-};
-
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function selectAgent(key) {
-  const meta = AGENT_META[key] || { label: key, color: '#7c3aed' };
-  document.getElementById('panel-title').textContent = '◈ ' + meta.label;
-  document.getElementById('panel-title').style.color = meta.color;
-  document.getElementById('panel-body').innerHTML =
-    '<div class="pv" style="color:#4b5563">Fetching from memory server...</div>';
-  document.getElementById('panel').classList.add('open');
+async function sendAudio() {
+  const blob = new Blob(audioChunks, { type: 'audio/webm' });
+  const fd   = new FormData();
+  fd.append('audio', blob, 'voice.webm');
 
-  fetch(`http://localhost:8080/api/memory/${key}`)
-    .then(r => r.ok ? r.json() : Promise.reject(r.status))
-    .then(d => fillPanel(key, d, meta.color))
-    .catch(() => fillPanelOffline(key, meta.color));
-}
+  try {
+    const res  = await fetch('/voice', { method: 'POST', body: fd });
+    const data = await res.json();
 
-function fillPanel(key, data, color) {
-  let h = '';
-  if (data.error) {
-    h += `<div class="pk">STATUS</div><div class="pv" style="color:#d97706">⚠ ${esc(data.error)}</div>`;
-    h += `<div class="pk" style="margin-top:16px">DEMO DATA</div><div class="pv">${esc(DEMO[key]||'')}</div>`;
-    document.getElementById('panel-body').innerHTML = h;
-    return;
-  }
-  if (key === 'brief' && Array.isArray(data.briefs)) {
-    const last = data.briefs[data.briefs.length - 1];
-    if (last) {
-      h += `<div class="pk">LAST BRIEF — ${new Date(last.timestamp).toLocaleString()}</div>`;
-      h += `<div class="pv">${esc(last.brief)}</div>`;
-    }
-    h += `<div class="pk">TOTAL BRIEFS STORED</div><div class="pv">${data.briefs.length}</div>`;
-  } else if (key === 'commission' && Array.isArray(data.records)) {
-    h += `<div class="pk">RECENT RECORDS (${data.records.length} total)</div>`;
-    data.records.slice(-5).reverse().forEach(r => {
-      h += `<div class="prow" style="color:${color}">
-        ${esc(r.carrier||'Unknown')} · ${esc(r.type)} · $${r.amount||'—'}<br>
-        <span style="font-size:11px;color:#64748b">${esc((r.description||'').substring(0,80))}</span>
-      </div>`;
-    });
-    if (data.last_updated)
-      h += `<div class="pk">UPDATED</div><div class="pv">${new Date(data.last_updated).toLocaleString()}</div>`;
-  } else if (key === 'ecommerce' && Array.isArray(data.listings)) {
-    h += `<div class="pk">LISTINGS (${data.listings.length} total)</div>`;
-    data.listings.slice(-4).reverse().forEach(l => {
-      h += `<div class="prow" style="color:${color}">
-        <strong>${esc((l.title||'Untitled').substring(0,60))}</strong><br>
-        $${l.price||'—'} · <span style="color:#94a3b8">${esc(l.status||'pending')}</span><br>
-        <span style="font-size:10px;color:#4b5563">${esc((l.tags||[]).join(' · '))}</span>
-      </div>`;
-    });
-    if (data.last_updated)
-      h += `<div class="pk">UPDATED</div><div class="pv">${new Date(data.last_updated).toLocaleString()}</div>`;
-  } else if (key === 'video') {
-    const list = data.scripts || data.records || [];
-    h += `<div class="pk">SCRIPTS (${list.length})</div>`;
-    list.slice(-3).reverse().forEach(s => {
-      const title = (s.title || s.description || 'Untitled').substring(0, 70);
-      h += `<div class="prow" style="color:${color}">${esc(title)}</div>`;
-    });
-    if (!list.length) h += `<div class="pv">${esc(DEMO.video)}</div>`;
-  } else if (key === 'leads') {
-    h += `<div class="pk">LAST RUN</div>`;
-    h += `<div class="pv">${esc(data.last_output || DEMO.leads)}</div>`;
-    const d = data.data || {};
-    if (d.new_24h !== undefined)
-      h += `<div class="pk">NEW (24H)</div><div class="pv">${d.new_24h}</div>`;
-  } else {
-    h += `<div class="pk">RAW DATA</div><div class="pv">${esc(JSON.stringify(data,null,2).substring(0,1500))}</div>`;
-  }
-  document.getElementById('panel-body').innerHTML = h || `<div class="pv">${esc(DEMO[key]||'')}</div>`;
-}
+    if (data.text) logVoice(data.text, data.reply);
 
-function fillPanelOffline(key, color) {
-  document.getElementById('panel-body').innerHTML =
-    `<div class="pk">SERVER STATUS</div>` +
-    `<div class="pv" style="color:#d97706">⚠ Memory server offline<br>` +
-    `Run <code style="color:#7c3aed">python memory_server.py</code> to load live data.</div>` +
-    `<div class="pk" style="margin-top:16px">DEMO DATA</div>` +
-    `<div class="pv">${esc(DEMO[key]||'')}</div>`;
-}
-
-function closePanel() {
-  document.getElementById('panel').classList.remove('open');
-}
-
-// ═══════════════════════════════════════════════════
-//  CLOCK HUD
-// ═══════════════════════════════════════════════════
-
-function updateClock() {
-  const n = new Date();
-  document.getElementById('hud-clock').textContent =
-    n.toLocaleTimeString('en-US', { hour12: false });
-  document.getElementById('hud-date').textContent =
-    n.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'short', day:'numeric' }).toUpperCase();
-}
-updateClock();
-setInterval(updateClock, 1000);
-
-// ═══════════════════════════════════════════════════
-//  ANIMATION LOOP
-// ═══════════════════════════════════════════════════
-
-const clock3 = new THREE.Clock();
-let T = 0;
-
-function animate() {
-  requestAnimationFrame(animate);
-  const dt = Math.min(clock3.getDelta(), .05);
-  T += dt;
-
-  // ── CAMERA LERP ──
-  if (autoRot && !isDrag) tgtTheta += dt * .055;
-  camTheta += (tgtTheta - camTheta) * .04;
-  camPhi   += (tgtPhi   - camPhi)   * .04;
-  camR     += (tgtR     - camR)     * .06;
-  camTarget.lerp(tgtTarget, .05);
-  syncCamera();
-
-  // ── ROBOTS WALK ──
-  allRobots.forEach(rb => {
-    if (rb.userData.isJarvis) {
-      rb.rotation.y = T * .28;
-      rb.position.y = Math.sin(T * .75) * .07;
-      return;
-    }
-    const ph = rb.userData.walkPhase;
-    const wave = Math.sin(T * .48 + ph);
-    if (rb.userData.walkAxisX) {
-      rb.position.x = rb.userData.walkCenterX + wave * 2.6;
-      rb.rotation.y = Math.cos(T * .48 + ph) > 0 ? 0 : Math.PI;
+    if (data.audio) {
+      playAudio(data.audio);
     } else {
-      rb.position.z = rb.userData.walkCenterZ + wave * 2.6;
-      rb.rotation.y = Math.cos(T * .48 + ph) > 0 ? -Math.PI/2 : Math.PI/2;
+      setState('idle');
     }
-    // bob
-    rb.position.y = Math.abs(Math.sin(T * 1.8 + ph)) * .09;
-  });
-
-  // ── HEAD LOOK (hover) ──
-  allRobots.forEach(rb => {
-    const hd = rb.userData.head;
-    if (!hd) return;
-    if (rb === hoveredRobot) {
-      const wp = new THREE.Vector3();
-      rb.getWorldPosition(wp);
-      const dir = camera.position.clone().sub(wp).normalize();
-      const ang = Math.atan2(dir.x, dir.z) - rb.rotation.y;
-      hd.rotation.y += (ang - hd.rotation.y) * .12;
-      hd.rotation.x += (-.2 - hd.rotation.x) * .1;
-    } else {
-      hd.rotation.y += (0 - hd.rotation.y) * .06;
-      hd.rotation.x += (0 - hd.rotation.x) * .06;
-    }
-  });
-
-  // ── JARVIS ORB PULSE ──
-  const pulse = .9 + Math.sin(T * 1.15) * .1;
-  orbGrp.scale.setScalar(pulse);
-  lJarvis.intensity = 5 + Math.sin(T * 1.15) * 2;
-
-  // ── ORB RINGS ROTATE ──
-  orbRings.forEach((rg, i) => {
-    rg.rotation.y += dt * (.38 + i * .13);
-    rg.rotation.x += dt * (.15 - i * .04);
-    rg.material.opacity = .3 + Math.sin(T * .7 + i * 1.2) * .18;
-  });
-
-  // ── SIGNAL RINGS (leads) ──
-  signalRings.forEach(rg => {
-    const idx = rg.userData.ringIdx;
-    const frac = ((T * .4 + idx * .3) % 1);
-    rg.scale.setScalar(1 + frac * .9);
-    rg.material.opacity = (1 - frac) * .55;
-  });
-
-  // ── ROOM LIGHT FLICKER ──
-  roomLights.forEach(({ l, base }) => {
-    l.intensity = base + Math.sin(T * 3.3 + l.position.x * .7) * .09;
-  });
-
-  // ── PARTICLES FLOAT ──
-  allParticles.forEach(pts => {
-    const pos = pts.geometry.attributes.position.array;
-    const vel = pts.userData.vel;
-    const n   = pts.userData.count;
-    for (let i = 0; i < n; i++) {
-      pos[i*3+1] += vel[i] * dt;
-      if (pos[i*3+1] > 6) pos[i*3+1] = 0;
-    }
-    pts.geometry.attributes.position.needsUpdate = true;
-  });
-
-  renderer.render(scene, camera);
+  } catch(e) {
+    console.error('Voice fetch error:', e);
+    setState('idle');
+  }
 }
 
-animate();
+function playAudio(b64) {
+  const bytes = atob(b64);
+  const buf   = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
 
-// ═══════════════════════════════════════════════════
-//  RESIZE
-// ═══════════════════════════════════════════════════
+  const { audioCtx: ctx, analyser: an } = getCtx();
+  ctx.decodeAudioData(buf.buffer.slice(0)).then(decoded => {
+    setState('speaking');
+    const src = ctx.createBufferSource();
+    src.buffer = decoded;
+    src.connect(an);
+    src.start(0);
+    src.onended = () => setState('idle');
+  }).catch(e => {
+    console.error('Audio decode error:', e);
+    setState('idle');
+  });
+}
 
-window.addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
+function logVoice(userText, reply) {
+  const ag = AGENTS.jarvis;
+  const t  = new Date().toTimeString().slice(0, 5);
+  ag.cmds.unshift(
+    { t, x: `YOU: ${userText}`, k: 'new' },
+    { t: '',  x: `JARVIS: ${reply}`, k: 'ok' }
+  );
+  ag.cmds  = ag.cmds.slice(0, 30);
+  ag.tasks++;
+  ag.rev++;
+  if (activeId === 'jarvis') renderCmds();
+  sel('jarvis');
+}
+
+// Start idle bar animation
+animateBars('idle');
 </script>
 </body>
 </html>
