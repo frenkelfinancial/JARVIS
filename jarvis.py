@@ -48,11 +48,14 @@ def ask_jarvis(message, context=""):
 
     _conversation_history.append({"role": "user", "content": user_content})
 
+    # Keep only last 20 messages (10 exchanges) to cap input tokens
+    trimmed = _conversation_history[-20:]
+
     response = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1024,
+        max_tokens=512,
         system=JARVIS_SYSTEM_PROMPT,
-        messages=_conversation_history,
+        messages=trimmed,
     )
 
     reply = response.content[0].text
@@ -64,21 +67,24 @@ def ask_jarvis(message, context=""):
 def build_daily_brief(agent_results={}):
     """
     Build a morning brief from a dict of agent summary strings.
-    Keys are agent names, values are summary strings returned by agent.run().
-    Returns the formatted brief string.
+    Uses a direct Claude call (no conversation history) to keep input tokens low.
     """
     if agent_results:
-        sections = []
-        for agent_name, summary in agent_results.items():
-            sections.append(f"[{agent_name.upper()}]\n{summary}")
+        sections = [f"[{k.upper()}]\n{v}" for k, v in agent_results.items()]
         context = "\n\n".join(sections)
     else:
-        context = "No agent data available for this brief."
+        context = "No agent data available."
 
-    message = (
-        "Good morning, Jace. Format the agent reports below into a clean, concise morning brief. "
-        "Lead with anything that needs immediate attention, then quick status on each area. "
-        "Keep it sharp — no padding."
+    prompt = (
+        "Format these agent reports into a concise morning brief for Jace. "
+        "Lead with anything urgent, then quick status per area. No padding.\n\n"
+        + context
     )
 
-    return ask_jarvis(message, context=context)
+    client = _get_client()
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=400,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.content[0].text

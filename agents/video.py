@@ -87,8 +87,8 @@ class VideoScriptAgent:
             raise EnvironmentError("ANTHROPIC_API_KEY not set in .env")
         client = anthropic.Anthropic(api_key=api_key)
         msg = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=600,
+            model="claude-haiku-4-5-20251001",
+            max_tokens=400,
             messages=[{"role": "user", "content": _SCRIPT_PROMPT}],
         )
         return msg.content[0].text.strip()

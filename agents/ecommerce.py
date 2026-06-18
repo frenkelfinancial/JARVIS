@@ -53,50 +53,26 @@ ETSY_TSHIRT_TAXONOMY_ID = 68887419
 
 NICHES = ["car culture", "motivational", "insurance/hustle", "midwest lifestyle"]
 
-BRAINSTORM_PROMPT = """You are a top Etsy print-on-demand seller who specializes in viral t-shirts.
+COMBINED_PROMPT = """You are a top Etsy print-on-demand seller and SEO copywriter.
 
-Brainstorm exactly 3 trending product ideas across these niches:
-{niches}
+Brainstorm 3 trending t-shirt ideas across these niches: {niches}
+Then write a complete Etsy listing for each one.
 
-Return a JSON object with this exact shape, no other text:
+Return ONLY a JSON object with this exact shape, no other text:
 {{
   "products": [
     {{
-      "title": "Short product concept (50 chars max)",
-      "niche": "which niche it targets",
-      "concept": "one sentence describing the design or vibe"
-    }},
-    {{
-      "title": "Short product concept (50 chars max)",
-      "niche": "which niche it targets",
-      "concept": "one sentence describing the design or vibe"
-    }},
-    {{
-      "title": "Short product concept (50 chars max)",
-      "niche": "which niche it targets",
-      "concept": "one sentence describing the design or vibe"
+      "title": "SEO-optimized Etsy title (max 140 chars)",
+      "niche": "niche name",
+      "concept": "one sentence design concept",
+      "description": "SEO description ~100 words — unisex material, gift idea, sizes S-3XL, satisfaction guarantee, 3-4 keyword phrases",
+      "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
+      "price": 27.99
     }}
   ]
 }}
 
-Make them specific, emotionally resonant, and highly purchasable."""
-
-LISTING_PROMPT = """You are an expert Etsy SEO copywriter for print-on-demand apparel.
-
-Create a complete Etsy listing for this product:
-Concept title: {title}
-Niche: {niche}
-Design concept: {concept}
-
-Return a JSON object with this exact shape, no other text:
-{{
-  "title": "Final SEO-optimized Etsy title (max 140 chars, front-load the strongest keywords)",
-  "description": "SEO product description — exactly 150 words. Include: premium unisex material, great gift idea, sizes S-3XL available, satisfaction guarantee. Embed 3-4 natural keyword phrases.",
-  "tags": ["keyword phrase 1", "keyword phrase 2", "keyword phrase 3", "keyword phrase 4", "keyword phrase 5"],
-  "price": 27.99
-}}
-
-Price must be between $24.99 and $34.99. Tags must be 1-3 word searchable phrases (max 20 chars each)."""
+Prices $24.99-$34.99. Tags max 20 chars each. Make ideas specific and emotionally resonant."""
 
 
 # ── Isometric Building ───────────────────────────────────────────────────────
@@ -296,37 +272,24 @@ class EcommerceAgent:
 
     # ── pipeline steps ────────────────────────────────────────────────────
 
-    def _brainstorm(self) -> list[dict]:
-        self._log("🧠  Brainstorming trending product ideas…")
+    def _brainstorm_and_generate(self) -> list[dict]:
+        """Single Claude call: 3 ideas + full listings in one shot."""
+        self._log("🧠  Generating 3 listings in one call…")
         if self._dash:
             self._dash.set_robot("idea", "active")
+            self._dash.set_robot("write", "active")
             self._dash.refresh()
 
-        raw      = self._claude(BRAINSTORM_PROMPT.format(niches=", ".join(NICHES)))
+        raw      = self._claude(COMBINED_PROMPT.format(niches=", ".join(NICHES)))
         products = _parse_json(raw).get("products", [])[:3]
 
         if self._dash:
             self._dash.set_robot("idea", "done")
-            self._dash.refresh()
-
-        self._log(f"✅  Got {len(products)} product concepts")
-        return products
-
-    def _generate_listing(self, product: dict) -> dict:
-        self._log(f"✏️   Generating listing: {product['title'][:38]}…")
-        if self._dash:
-            self._dash.set_robot("write", "active")
-            self._dash.refresh()
-
-        raw     = self._claude(LISTING_PROMPT.format(**product))
-        listing = _parse_json(raw)
-
-        if self._dash:
             self._dash.set_robot("write", "done")
             self._dash.refresh()
 
-        self._log(f"✅  Listing ready — ${listing.get('price', 0):.2f}")
-        return listing
+        self._log(f"✅  Got {len(products)} listings")
+        return products
 
     def _upload(self, listing: dict, etsy_key: str, etsy_shop_id: str) -> dict:
         self._log(f"📡  Posting to Etsy: {listing.get('title', '')[:38]}…")
@@ -359,9 +322,9 @@ class EcommerceAgent:
         timestamp    = datetime.now().isoformat()
 
         try:
-            products = self._brainstorm()
+            products = self._brainstorm_and_generate()
         except Exception as exc:
-            msg = f"ETSY AGENT\n  Claude brainstorm failed: {exc}"
+            msg = f"ETSY AGENT\n  Claude call failed: {exc}"
             memory_store.update_agent(self.name, msg)
             return msg
 
@@ -371,12 +334,7 @@ class EcommerceAgent:
         titles    = []
 
         for product in products:
-            try:
-                listing = self._generate_listing(product)
-            except Exception as exc:
-                self._log(f"⚠️   Listing generation failed: {exc}")
-                continue
-
+            listing = dict(product)
             listing["generated_at"] = timestamp
 
             if use_etsy:
