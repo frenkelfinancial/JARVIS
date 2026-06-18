@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>JARVIS — Bullpen AI Ecosystem</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0f;overflow:hidden;font-family:'Courier New',Courier,monospace;color:#e2e8f0}
+canvas{display:block;position:fixed;top:0;left:0;z-index:1}
+
+/* ── HUD ── */
+#hud{position:fixed;top:0;left:0;right:0;bottom:0;z-index:10;pointer-events:none}
+
+#hud-title{
+  position:absolute;top:20px;left:24px;
+  color:#7c3aed;font-size:17px;font-weight:bold;letter-spacing:3px;
+  text-shadow:0 0 18px #7c3aed,0 0 40px #4c1d95;
+}
+#hud-sub{
+  position:absolute;top:44px;left:24px;
+  color:#4c1d95;font-size:10px;letter-spacing:2px;
+}
+#hud-clock{
+  position:absolute;top:18px;right:24px;
+  color:#0d9488;font-size:24px;font-weight:bold;letter-spacing:3px;
+  text-shadow:0 0 16px #0d9488;
+}
+#hud-date{
+  position:absolute;top:48px;right:24px;
+  color:#065f46;font-size:10px;letter-spacing:1px;text-align:right;
+}
+#controls-hint{
+  position:absolute;bottom:50px;left:24px;
+  color:#2d2d55;font-size:10px;line-height:1.8;
+}
+
+/* corner brackets */
+.corner{position:absolute;width:22px;height:22px;border-color:#2d1b69;border-style:solid;opacity:.6}
+.c-tl{top:10px;left:10px;border-width:2px 0 0 2px}
+.c-tr{top:10px;right:10px;border-width:2px 2px 0 0}
+.c-bl{bottom:42px;left:10px;border-width:0 0 2px 2px}
+.c-br{bottom:42px;right:10px;border-width:0 2px 2px 0}
+
+/* ── TICKER ── */
+#ticker{
+  position:absolute;bottom:0;left:0;right:0;height:36px;
+  background:rgba(5,5,18,.95);border-top:1px solid #1a1a3a;
+  display:flex;align-items:center;overflow:hidden;
+}
+#ticker-label{
+  background:#7c3aed;color:#fff;font-size:10px;font-weight:bold;
+  letter-spacing:2px;padding:0 14px;height:100%;
+  display:flex;align-items:center;white-space:nowrap;flex-shrink:0;
+}
+#ticker-track{
+  display:flex;align-items:center;
+  animation:tick 55s linear infinite;white-space:nowrap;
+}
+@keyframes tick{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.t-item{padding:0 36px;color:#64748b;font-size:12px}
+.t-item em{color:#7c3aed;font-style:normal;margin-right:6px}
+
+/* ── SIDE PANEL ── */
+#panel{
+  position:fixed;top:0;right:-440px;bottom:0;width:420px;
+  background:rgba(4,4,16,.97);border-left:1px solid #1a1a3a;
+  z-index:20;display:flex;flex-direction:column;
+  transition:right .38s cubic-bezier(.4,0,.2,1);
+  pointer-events:all;
+}
+#panel.open{right:0}
+#panel-head{
+  padding:20px 20px 14px;border-bottom:1px solid #1a1a3a;
+  display:flex;justify-content:space-between;align-items:center;
+}
+#panel-title{
+  color:#7c3aed;font-size:12px;font-weight:bold;letter-spacing:2px;
+  text-shadow:0 0 10px #7c3aed;
+}
+#panel-close{
+  background:none;border:none;color:#3b0764;cursor:pointer;
+  font-size:18px;pointer-events:all;transition:color .2s;
+}
+#panel-close:hover{color:#7c3aed}
+#panel-ping{
+  padding:6px 20px;font-size:10px;color:#0d9488;letter-spacing:1px;
+  border-bottom:1px solid #0d1117;
+}
+#panel-body{
+  flex:1;overflow-y:auto;padding:16px 20px;
+  scrollbar-width:thin;scrollbar-color:#1a1a3a transparent;
+}
+.pk{color:#7c3aed;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin:14px 0 4px}
+.pk:first-child{margin-top:0}
+.pv{color:#94a3b8;font-size:12px;line-height:1.65;white-space:pre-wrap;word-break:break-word}
+.prow{
+  border-left:2px solid currentColor;padding-left:10px;margin:6px 0;
+  color:#94a3b8;font-size:12px;line-height:1.5;
+}
+</style>
+</head>
+<body>
+
+<!-- HUD overlay -->
+<div id="hud">
+  <div id="hud-title">▸ BULLPEN AI ECOSYSTEM</div>
+  <div id="hud-sub">JARVIS COMMAND CENTER &nbsp;·&nbsp; FRENKEL FINANCIAL</div>
+  <div id="hud-clock">00:00:00</div>
+  <div id="hud-date">—</div>
+  <div id="controls-hint">
+    DRAG — Orbit &nbsp;|&nbsp; SCROLL — Zoom<br>
+    1–5 — Focus Room &nbsp;|&nbsp; 0 — Overview<br>
+    CLICK — Select Agent
+  </div>
+  <div class="corner c-tl"></div>
+  <div class="corner c-tr"></div>
+  <div class="corner c-bl"></div>
+  <div class="corner c-br"></div>
+</div>
+
+<!-- Ticker -->
+<div id="ticker">
+  <div id="ticker-label">LIVE FEED</div>
+  <div id="ticker-track" id="ticker-track">
+    <span class="t-item"><em>◈ COMMISSION BOT</em>Monitoring carrier emails — Corebridge, Americo, Transamerica feeds active</span>
+    <span class="t-item"><em>◈ LEAD BOT</em>5 new leads need follow-up — pipeline refresh in 6 hours</span>
+    <span class="t-item"><em>◈ VIDEO BOT</em>Generating today's love-story script — ElevenLabs TTS queued</span>
+    <span class="t-item"><em>◈ SHOP BOT</em>3 new Etsy listings drafted — car culture, midwest grind, final expense</span>
+    <span class="t-item"><em>◈ JARVIS</em>All systems nominal. Good morning, Jace. Empire status: optimal.</span>
+    <!-- duplicate for seamless loop -->
+    <span class="t-item"><em>◈ COMMISSION BOT</em>Monitoring carrier emails — Corebridge, Americo, Transamerica feeds active</span>
+    <span class="t-item"><em>◈ LEAD BOT</em>5 new leads need follow-up — pipeline refresh in 6 hours</span>
+    <span class="t-item"><em>◈ VIDEO BOT</em>Generating today's love-story script — ElevenLabs TTS queued</span>
+    <span class="t-item"><em>◈ SHOP BOT</em>3 new Etsy listings drafted — car culture, midwest grind, final expense</span>
+    <span class="t-item"><em>◈ JARVIS</em>All systems nominal. Good morning, Jace. Empire status: optimal.</span>
+  </div>
+</div>
+
+<!-- Side panel -->
+<div id="panel">
+  <div id="panel-head">
+    <div id="panel-title">◈ AGENT STATUS</div>
+    <button id="panel-close" onclick="closePanel()">✕</button>
+  </div>
+  <div id="panel-ping">⬤ &nbsp;CONNECTED — JARVIS MEMORY STORE</div>
+  <div id="panel-body"><div class="pv">Click any agent to view live status...</div></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════
+//  RENDERER / SCENE / CAMERA
+// ═══════════════════════════════════════════════════
+
+const W = window.innerWidth, H = window.innerHeight;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(W, H);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+renderer.domElement.style.zIndex = 1;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a0f);
+scene.fog = new THREE.FogExp2(0x0a0a0f, 0.016);
+
+const camera = new THREE.PerspectiveCamera(24, W / H, 0.1, 300);
+
+// ═══════════════════════════════════════════════════
+//  CAMERA ORBIT (manual — no OrbitControls)
+// ═══════════════════════════════════════════════════
+
+let camTheta  = Math.PI * 0.22;    // azimuth
+let camPhi    = 0.90;               // polar from top
+let camR      = 52;                 // radius
+let camTarget = new THREE.Vector3(0, 1, 0);
+let tgtTheta  = camTheta, tgtPhi = camPhi, tgtR = camR;
+let tgtTarget = new THREE.Vector3(0, 1, 0);
+
+let autoRot    = true;
+let isDrag     = false;
+let didDrag    = false;
+let lastMX     = 0, lastMY = 0;
+
+function syncCamera() {
+  const sx = Math.sin(camPhi), cy = Math.cos(camPhi);
+  camera.position.set(
+    camTarget.x + camR * sx * Math.sin(camTheta),
+    camTarget.y + camR * cy,
+    camTarget.z + camR * sx * Math.cos(camTheta)
+  );
+  camera.lookAt(camTarget);
+}
+syncCamera();
+
+// ═══════════════════════════════════════════════════
+//  COLORS
+// ═══════════════════════════════════════════════════
+
+const C = {
+  commission : 0xd97706,
+  leads      : 0x2563eb,
+  video      : 0xec4899,
+  shop       : 0x10b981,
+  jarvis     : 0x7c3aed,
+};
+
+// ═══════════════════════════════════════════════════
+//  GEOMETRY / MATERIAL HELPERS
+// ═══════════════════════════════════════════════════
+
+function lmat(color, emissive, ei) {
+  return new THREE.MeshLambertMaterial({
+    color,
+    emissive: emissive || 0x000000,
+    emissiveIntensity: ei || 0,
+  });
+}
+function bmat(color) { return new THREE.MeshBasicMaterial({ color }); }
+
+function mkBox(w, h, d, mat, x, y, z) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x || 0, y || 0, z || 0);
+  return m;
+}
+function mkCyl(rt, rb, h, seg, mat, x, y, z) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat);
+  m.position.set(x || 0, y || 0, z || 0);
+  return m;
+}
+function mkSph(r, ws, hs, mat, x, y, z) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, ws, hs), mat);
+  m.position.set(x || 0, y || 0, z || 0);
+  return m;
+}
+
+// Canvas sprite label
+function makeLabel(text, hexColor, scaleX, scaleY) {
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = 80;
+  const ctx = cv.getContext('2d');
+  // bg
+  ctx.fillStyle = 'rgba(4,4,20,.8)';
+  ctx.beginPath();
+  ctx.roundRect(2, 2, 508, 76, 8);
+  ctx.fill();
+  // border
+  ctx.strokeStyle = hexColor;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(2, 2, 508, 76, 8);
+  ctx.stroke();
+  // text
+  ctx.fillStyle = hexColor;
+  ctx.font = 'bold 24px Courier New';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = hexColor;
+  ctx.shadowBlur = 10;
+  ctx.fillText(text, 256, 40);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(cv), transparent: true
+  }));
+  sp.scale.set(scaleX || 3.2, scaleY || 0.5, 1);
+  return sp;
+}
+
+function makeRoomLabel(text, hexColor) {
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = 80;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = hexColor;
+  ctx.font = 'bold 22px Courier New';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = hexColor;
+  ctx.shadowBlur = 18;
+  ctx.fillText(text, 256, 40);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(cv), transparent: true
+  }));
+  sp.scale.set(5.5, 0.9, 1);
+  return sp;
+}
+
+// ═══════════════════════════════════════════════════
+//  LIGHTING
+// ═══════════════════════════════════════════════════
+
+scene.add(new THREE.AmbientLight(0x111133, 1.5));
+
+// Sky fill
+const skyLight = new THREE.HemisphereLight(0x0d0d30, 0x050510, 0.8);
+scene.add(skyLight);
+
+const roomLights = [];
+function addRoomLight(color, x, z, intensity, dist) {
+  const l = new THREE.PointLight(color, intensity || 3, dist || 18);
+  l.position.set(x, 6, z);
+  scene.add(l);
+  roomLights.push({ l, base: intensity || 3 });
+  return l;
+}
+
+const lCommission = addRoomLight(C.commission, -9, -9, 3.5, 20);
+const lLeads      = addRoomLight(C.leads,       9, -9, 3.5, 20);
+const lVideo      = addRoomLight(C.video,       -9,  9, 3.5, 20);
+const lShop       = addRoomLight(C.shop,         9,  9, 3.5, 20);
+const lJarvis     = addRoomLight(C.jarvis,       0,  0, 5.0, 16);
+
+// ═══════════════════════════════════════════════════
+//  BUILDING — FLOOR, WALLS, DIVIDERS
+// ═══════════════════════════════════════════════════
+
+// Main floor
+const floor = new THREE.Mesh(
+  new THREE.BoxGeometry(38, 0.25, 38),
+  lmat(0x0c0c1e)
+);
+floor.position.y = -0.125;
+scene.add(floor);
+
+// Grid
+const grid = new THREE.GridHelper(38, 19, 0x18183a, 0x101028);
+grid.position.y = 0.01;
+scene.add(grid);
+
+// Room zone tint panels
+function zoneTint(color, x, z, w, d) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w || 14, 0.04, d || 14), lmat(color));
+  m.position.set(x, 0.025, z);
+  scene.add(m);
+}
+zoneTint(0x0f0800, -9, -9);  // commission amber
+zoneTint(0x00040e, 9,  -9);  // leads blue
+zoneTint(0x100018,  0,  0, 12, 12); // jarvis purple
+zoneTint(0x0e0010, -9,  9);  // video pink
+zoneTint(0x001208,  9,  9);  // shop green
+
+// Outer perimeter walls
+const wallMat = lmat(0x101025);
+function outerWall(w, h, d, x, z) {
+  const wl = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+  wl.position.set(x, h / 2, z);
+  scene.add(wl);
+}
+outerWall(38, 3.5, 0.4,  0, -19);
+outerWall(38, 3.5, 0.4,  0,  19);
+outerWall(0.4, 3.5, 38, -19,  0);
+outerWall(0.4, 3.5, 38,  19,  0);
+
+// Room dividers (partial — leave corridors open at x=0 and z=0)
+const divMat = lmat(0x14143a);
+function div(w, h, d, x, z) {
+  const dv = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), divMat);
+  dv.position.set(x, h / 2, z);
+  scene.add(dv);
+}
+// horizontal divider (z = 0 line), gap at center
+div(13, 2.2, 0.3, -10.5, 0);
+div(13, 2.2, 0.3,  10.5, 0);
+// vertical divider (x = 0 line), gap at center
+div(0.3, 2.2, 13, 0, -10.5);
+div(0.3, 2.2, 13, 0,  10.5);
+
+// Ceiling strips (neon accent)
+function ceilStrip(color, x, z, rx) {
+  const s = new THREE.Mesh(
+    new THREE.BoxGeometry(rx ? 0.1 : 12, 0.06, rx ? 12 : 0.1),
+    bmat(color)
+  );
+  s.position.set(x, 3.2, z);
+  scene.add(s);
+}
+ceilStrip(C.commission, -9, -9, false);
+ceilStrip(C.commission, -9, -9, true);
+ceilStrip(C.leads, 9, -9, false);
+ceilStrip(C.leads, 9, -9, true);
+ceilStrip(C.video, -9, 9, false);
+ceilStrip(C.video, -9, 9, true);
+ceilStrip(C.shop, 9, 9, false);
+ceilStrip(C.shop, 9, 9, true);
+
+// ═══════════════════════════════════════════════════
+//  ROOM FURNITURE — COMMISSION  (amber)
+// ═══════════════════════════════════════════════════
+
+const commGrp = new THREE.Group();
+commGrp.position.set(-9, 0, -9);
+
+// Desk surface + legs
+commGrp.add(mkBox(4.5, 0.18, 2, lmat(0x2a1600, C.commission, .06), 0, .95, -1.5));
+[[-1.9, -0.5], [1.9, -0.5], [-1.9, -2.5], [1.9, -2.5]].forEach(([lx, lz]) =>
+  commGrp.add(mkBox(.12, .94, .12, lmat(0x3d2200), lx, .47, lz))
+);
+
+// Monitor (glowing amber screen)
+commGrp.add(mkBox(2.4, 1.5, .07, lmat(0x000000, C.commission, 1.3), 0, 1.85, -2.4));
+commGrp.add(mkBox(.12, .32, .12, lmat(0x1a1000), 0, 1.07, -2.35));
+commGrp.add(mkBox(.6, .06, .4, lmat(0x1a1000), 0, .93, -2.35));
+
+// Chair
+commGrp.add(mkBox(.95, .1, .95, lmat(0x1a1000), 0, .55, -.5));
+commGrp.add(mkBox(.95, .8, .1, lmat(0x1a1000), 0, .95, -.08));
+commGrp.add(mkCyl(.06, .06, .54, 6, lmat(0x3a3a3a), 0, .27, -.5));
+
+// Filing cabinets (3)
+for (let i = 0; i < 3; i++) {
+  const h = 1.6 + i * .35;
+  commGrp.add(mkBox(1.1, h, .85, lmat(0x1a1000, C.commission, .04), 2.8, h / 2, 1.8 + i * .1));
+  for (let j = 0; j < 3; j++) {
+    commGrp.add(mkBox(1, .04, .02, bmat(C.commission), 2.8, .45 + j * .45, 2.25 + i * .1));
+  }
+}
+
+// Room label
+const rLabelComm = makeRoomLabel('◈ COMMISSION', '#d97706');
+rLabelComm.position.set(0, 7, -5);
+commGrp.add(rLabelComm);
+
+scene.add(commGrp);
+
+// ═══════════════════════════════════════════════════
+//  ROOM FURNITURE — LEADS  (blue)
+// ═══════════════════════════════════════════════════
+
+const leadsGrp = new THREE.Group();
+leadsGrp.position.set(9, 0, -9);
+
+// Desk
+leadsGrp.add(mkBox(4.5, .18, 2, lmat(0x001030, C.leads, .05), 0, .95, -1.5));
+[[-1.9, -.5], [1.9, -.5], [-1.9, -2.5], [1.9, -2.5]].forEach(([lx, lz]) =>
+  leadsGrp.add(mkBox(.12, .94, .12, lmat(0x001840), lx, .47, lz))
+);
+
+// Monitor
+leadsGrp.add(mkBox(2.4, 1.5, .07, lmat(0x000010, C.leads, 1.2), 0, 1.85, -2.4));
+leadsGrp.add(mkBox(.12, .32, .12, lmat(0x001030), 0, 1.07, -2.35));
+
+// Chair
+leadsGrp.add(mkBox(.95, .1, .95, lmat(0x001030), 0, .55, -.5));
+leadsGrp.add(mkBox(.95, .8, .1, lmat(0x001030), 0, .95, -.08));
+leadsGrp.add(mkCyl(.06, .06, .54, 6, lmat(0x3a3a3a), 0, .27, -.5));
+
+// Antenna tower
+const antMat = lmat(0x0a1a40, C.leads, .15);
+leadsGrp.add(mkCyl(.08, .1, 4.5, 8, antMat, -3.5, 2.25, 2));
+leadsGrp.add(mkBox(2, .07, .07, bmat(C.leads), -3.5, 4.0, 2));
+leadsGrp.add(mkBox(.07, .07, 2, bmat(C.leads), -3.5, 4.0, 2));
+leadsGrp.add(mkSph(.14, 8, 8, bmat(C.leads), -3.5, 4.55, 2));
+
+// Signal rings (animated later)
+const signalRings = [];
+for (let i = 0; i < 4; i++) {
+  const rg = new THREE.Mesh(
+    new THREE.TorusGeometry(.8 + i * .6, .04, 8, 40),
+    new THREE.MeshBasicMaterial({ color: C.leads, transparent: true, opacity: .5, wireframe: false })
+  );
+  rg.rotation.x = Math.PI / 2;
+  rg.position.set(-3.5, .8, 2);
+  rg.userData.ringIdx = i;
+  leadsGrp.add(rg);
+  signalRings.push(rg);
+}
+
+const rLabelLeads = makeRoomLabel('◈ LEADS', '#2563eb');
+rLabelLeads.position.set(0, 7, -5);
+leadsGrp.add(rLabelLeads);
+
+scene.add(leadsGrp);
+
+// ═══════════════════════════════════════════════════
+//  ROOM FURNITURE — VIDEO  (pink)
+// ═══════════════════════════════════════════════════
+
+const videoGrp = new THREE.Group();
+videoGrp.position.set(-9, 0, 9);
+
+// Desk
+videoGrp.add(mkBox(4.5, .18, 2, lmat(0x200010, C.video, .05), 0, .95, -1.5));
+[[-1.9, -.5], [1.9, -.5], [-1.9, -2.5], [1.9, -2.5]].forEach(([lx, lz]) =>
+  videoGrp.add(mkBox(.12, .94, .12, lmat(0x280018), lx, .47, lz))
+);
+
+// Monitor
+videoGrp.add(mkBox(2.4, 1.5, .07, lmat(0x100008, C.video, 1.1), 0, 1.85, -2.4));
+videoGrp.add(mkBox(.12, .32, .12, lmat(0x200010), 0, 1.07, -2.35));
+
+// Chair
+videoGrp.add(mkBox(.95, .1, .95, lmat(0x200010), 0, .55, -.5));
+videoGrp.add(mkBox(.95, .8, .1, lmat(0x200010), 0, .95, -.08));
+videoGrp.add(mkCyl(.06, .06, .54, 6, lmat(0x3a3a3a), 0, .27, -.5));
+
+// Tripod + camera rig
+const tripMat = lmat(0x2a0a1a, C.video, .1);
+[[-0.55, -0.55], [0.55, -0.55], [0, 0.8]].forEach(([lx, lz]) => {
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(.04, .06, 2.5, 6), tripMat);
+  leg.position.set(-3 + lx, 1.25, 2.5 + lz);
+  leg.rotation.z = lx * .28;
+  leg.rotation.x = -lz * .12;
+  videoGrp.add(leg);
+});
+videoGrp.add(mkBox(1.3, .75, 1.0, lmat(0x150008, C.video, .1), -3, 2.75, 2.5));
+videoGrp.add(mkCyl(.27, .22, .9, 16, lmat(0x040006, C.video, .35), -3, 2.75, 2.0));
+videoGrp.add(mkCyl(.3, .3, .07, 16, bmat(C.video), -3, 2.75, 1.55));
+
+// Clapperboard
+videoGrp.add(mkBox(1.8, 1.3, .09, lmat(0x0a0014, C.video, .15), 3, 2.2, 2.5));
+videoGrp.add(mkBox(1.8, .28, .1, lmat(0x180026, C.video, .5), 3, 2.9, 2.51));
+for (let i = 0; i < 6; i++) {
+  videoGrp.add(mkBox(.22, .24, .11, bmat(i % 2 === 0 ? 0xeeeeee : 0x111111),
+    3 - .75 + i * .3, 2.9, 2.52));
+}
+
+const rLabelVideo = makeRoomLabel('◈ VIDEO', '#ec4899');
+rLabelVideo.position.set(0, 7, 5);
+videoGrp.add(rLabelVideo);
+
+scene.add(videoGrp);
+
+// ═══════════════════════════════════════════════════
+//  ROOM FURNITURE — SHOP  (green)
+// ═══════════════════════════════════════════════════
+
+const shopGrp = new THREE.Group();
+shopGrp.position.set(9, 0, 9);
+
+// Desk
+shopGrp.add(mkBox(4.5, .18, 2, lmat(0x001a08, C.shop, .05), 0, .95, -1.5));
+[[-1.9, -.5], [1.9, -.5], [-1.9, -2.5], [1.9, -2.5]].forEach(([lx, lz]) =>
+  shopGrp.add(mkBox(.12, .94, .12, lmat(0x001a08), lx, .47, lz))
+);
+
+// Monitor
+shopGrp.add(mkBox(2.4, 1.5, .07, lmat(0x000a04, C.shop, 1.1), 0, 1.85, -2.4));
+shopGrp.add(mkBox(.12, .32, .12, lmat(0x001a08), 0, 1.07, -2.35));
+
+// Chair
+shopGrp.add(mkBox(.95, .1, .95, lmat(0x001a08), 0, .55, -.5));
+shopGrp.add(mkBox(.95, .8, .1, lmat(0x001a08), 0, .95, -.08));
+shopGrp.add(mkCyl(.06, .06, .54, 6, lmat(0x3a3a3a), 0, .27, -.5));
+
+// Shelf unit (back wall)
+shopGrp.add(mkBox(.09, 3.5, 1.0, lmat(0x0d1608), -3.8, 1.75, 2.5));
+shopGrp.add(mkBox(.09, 3.5, 1.0, lmat(0x0d1608),  0.8, 1.75, 2.5));
+const prodColors = [C.commission, C.leads, C.video, C.jarvis, C.shop, 0xffffff, 0xff6600, 0x00ccff];
+for (let row = 0; row < 3; row++) {
+  shopGrp.add(mkBox(4.5, .08, 1.0, lmat(0x0d1608), -1.5, .65 + row * 1.1, 2.5));
+  for (let p = 0; p < 7; p++) {
+    const h = .28 + Math.random() * .28;
+    const m = lmat(prodColors[(row * 7 + p) % prodColors.length],
+                   prodColors[(row * 7 + p) % prodColors.length], .12);
+    shopGrp.add(mkBox(.35, h, .38, m, -1.5 - 1.55 + p * .52, .7 + row * 1.1 + h / 2, 2.5));
+  }
+}
+
+const rLabelShop = makeRoomLabel('◈ SHOP', '#10b981');
+rLabelShop.position.set(0, 7, 5);
+shopGrp.add(rLabelShop);
+
+scene.add(shopGrp);
+
+// ═══════════════════════════════════════════════════
+//  JARVIS CORE  (center, purple orb)
+// ═══════════════════════════════════════════════════
+
+const jarvisGrp = new THREE.Group();
+
+// Pedestal
+[
+  [1.5, 1.8, .28, 0, .14, 0],
+  [1.0, 1.3, .22, 0, .36, 0],
+  [.55, .9,  .22, 0, .58, 0],
+  [.2,  .55, .85, 0, 1.08, 0],
+].forEach(([rt, rb, h, x, y, z]) =>
+  jarvisGrp.add(mkCyl(rt, rb, h, 12, lmat(0x0f0020, C.jarvis, .2), x, y, z))
+);
+
+// Orb group (so we can scale for pulse)
+const orbGrp = new THREE.Group();
+orbGrp.position.set(0, 2.7, 0);
+
+const orbCore = mkSph(1.1, 32, 32, bmat(C.jarvis));
+orbGrp.add(orbCore);
+
+// Glow shells
+for (let i = 0; i < 3; i++) {
+  orbGrp.add(mkSph(1.15 + i * .28, 20, 20,
+    new THREE.MeshBasicMaterial({
+      color: C.jarvis, transparent: true,
+      opacity: .07 - i * .02, side: THREE.BackSide
+    })
+  ));
+}
+
+// Wireframe shell
+orbGrp.add(mkSph(1.18, 14, 14,
+  new THREE.MeshBasicMaterial({ color: 0xaa44ff, wireframe: true, transparent: true, opacity: .35 })
+));
+
+jarvisGrp.add(orbGrp);
+
+// Orbital rings
+const orbRings = [];
+[[0, 0, 0], [Math.PI/3, 0, Math.PI/4], [0, Math.PI/2.5, Math.PI/6]].forEach((rot, i) => {
+  const rg = new THREE.Mesh(
+    new THREE.TorusGeometry(2.0 + i * .4, .045, 8, 60),
+    new THREE.MeshBasicMaterial({ color: C.jarvis, transparent: true, opacity: .45 })
+  );
+  rg.position.copy(orbGrp.position);
+  rg.rotation.set(...rot);
+  jarvisGrp.add(rg);
+  orbRings.push(rg);
+});
+
+// Data link beams to rooms (thin vertical cylinders + capped spheres)
+const beamDirs = [
+  { ang: Math.PI * 1.25, color: C.commission },
+  { ang: Math.PI * 0.75, color: C.leads },
+  { ang: Math.PI * 0.25, color: C.shop },
+  { ang: Math.PI * 1.75, color: C.video },
+];
+beamDirs.forEach(({ ang, color }) => {
+  const r2 = 6;
+  const bx = Math.sin(ang) * r2, bz = Math.cos(ang) * r2;
+  jarvisGrp.add(mkCyl(.03, .03, 4.5, 5,
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .28 }), bx, 2.5, bz));
+  jarvisGrp.add(mkSph(.15, 8, 8, bmat(color), bx, 4.85, bz));
+});
+
+const rLabelJarvis = makeRoomLabel('◈ JARVIS CORE', '#7c3aed');
+rLabelJarvis.position.set(0, 7.5, 0);
+jarvisGrp.add(rLabelJarvis);
+
+scene.add(jarvisGrp);
+
+// ═══════════════════════════════════════════════════
+//  PARTICLES
+// ═══════════════════════════════════════════════════
+
+const allParticles = [];
+
+function makeParticles(count, spread, color, wx, wz) {
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(count * 3);
+  const vel = [];
+  for (let i = 0; i < count; i++) {
+    pos[i*3]   = (Math.random() - .5) * spread;
+    pos[i*3+1] = Math.random() * 5.5;
+    pos[i*3+2] = (Math.random() - .5) * spread;
+    vel.push(.25 + Math.random() * .65);
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo,
+    new THREE.PointsMaterial({ color, size: .06, transparent: true, opacity: .75 }));
+  pts.position.set(wx, .2, wz);
+  pts.userData.vel = vel;
+  pts.userData.count = count;
+  scene.add(pts);
+  allParticles.push(pts);
+}
+
+makeParticles(35, 7, C.commission, -9, -9);
+makeParticles(35, 7, C.leads,      9, -9);
+makeParticles(35, 7, C.video,     -9,  9);
+makeParticles(35, 7, C.shop,       9,  9);
+makeParticles(25, 5, C.jarvis,     0,  0);
+
+// ═══════════════════════════════════════════════════
+//  ROBOT FACTORY
+// ═══════════════════════════════════════════════════
+
+function createRobot(color, label, isJarvis) {
+  const grp = new THREE.Group();
+  const dark = new THREE.Color(color).multiplyScalar(.35);
+  const darkHex = (dark.r * 255 << 16) | (dark.g * 255 << 8) | (dark.b * 255 | 0);
+
+  // legs
+  [-.2, .2].forEach(lx =>
+    grp.add(mkBox(.17, .42, .17, lmat(darkHex), lx, .21, 0))
+  );
+
+  // body
+  grp.add(mkBox(.88, .96, .58, lmat(color, color, .14), 0, .9, 0));
+
+  // chest panel
+  grp.add(mkBox(.38, .28, .04, lmat(0x000018, color, .8), 0, .95, .3));
+
+  // neck
+  grp.add(mkBox(.22, .16, .22, lmat(darkHex), 0, 1.42, 0));
+
+  // head (own group for rotation)
+  const head = new THREE.Group();
+  head.position.set(0, 1.62, 0);
+  grp.add(head);
+  grp.userData.head = head;
+
+  head.add(mkBox(.7, .58, .58, lmat(color, color, .1)));
+
+  // eyes
+  const eyeColor = isJarvis ? 0xcc44ff : 0x00f0ff;
+  const eyeR = isJarvis ? .11 : .075;
+  const eyeMat = bmat(eyeColor);
+  const eGeo = new THREE.SphereGeometry(eyeR, 10, 10);
+  [-.18, .18].forEach(ex => {
+    const eye = new THREE.Mesh(eGeo, eyeMat);
+    eye.position.set(ex, .05, .3);
+    head.add(eye);
+  });
+
+  // antenna (Jarvis only)
+  if (isJarvis) {
+    head.add(mkBox(.07, .45, .07, lmat(color, color, .5), 0, .52, 0));
+    head.add(mkSph(.13, 8, 8, bmat(color), 0, .77, 0));
+  }
+
+  // name label
+  const hexStr = '#' + new THREE.Color(color).getHexString();
+  const lbl = makeLabel(label, hexStr, isJarvis ? 3.8 : 3.2, isJarvis ? .55 : .48);
+  lbl.position.set(0, isJarvis ? 3.4 : 2.9, 0);
+  grp.add(lbl);
+
+  if (isJarvis) grp.scale.setScalar(1.6);
+
+  return grp;
+}
+
+// ═══════════════════════════════════════════════════
+//  PLACE ROBOTS
+// ═══════════════════════════════════════════════════
+
+const clickables = [];
+const allRobots  = [];
+
+function placeRobot(color, label, parentGrp, lx, lz, isJarvis, agentKey) {
+  const rb = createRobot(color, label, isJarvis);
+  rb.position.set(lx, 0, lz);
+  rb.userData.agentKey   = agentKey;
+  rb.userData.walkCenterX = lx;
+  rb.userData.walkCenterZ = lz;
+  rb.userData.walkPhase   = Math.random() * Math.PI * 2;
+  rb.userData.walkAxisX   = Math.random() > .5;
+  rb.userData.isJarvis    = isJarvis;
+  parentGrp.add(rb);
+  allRobots.push(rb);
+
+  rb.traverse(child => {
+    if (child.isMesh) {
+      child.userData.robotRef  = rb;
+      child.userData.agentKey  = agentKey;
+      clickables.push(child);
+    }
+  });
+  return rb;
+}
+
+const rbComm  = placeRobot(C.commission, 'COMMISSION BOT', commGrp,   0, .5, false, 'commission');
+const rbLeads = placeRobot(C.leads,      'LEAD BOT',       leadsGrp,  0, .5, false, 'leads');
+const rbVideo = placeRobot(C.video,      'VIDEO BOT',      videoGrp,  0, .5, false, 'video');
+const rbShop  = placeRobot(C.shop,       'SHOP BOT',       shopGrp,   0, .5, false, 'ecommerce');
+const rbJarvis= placeRobot(C.jarvis,     'JARVIS',         jarvisGrp, 0, -4.5, true, 'brief');
+
+// ═══════════════════════════════════════════════════
+//  RAYCASTING STATE
+// ═══════════════════════════════════════════════════
+
+const raycaster = new THREE.Raycaster();
+const mouse2D   = new THREE.Vector2();
+let hoveredRobot = null;
+
+// ═══════════════════════════════════════════════════
+//  INTERACTION HANDLERS
+// ═══════════════════════════════════════════════════
+
+window.addEventListener('mousedown', e => {
+  isDrag = true; didDrag = false;
+  lastMX = e.clientX; lastMY = e.clientY;
+  autoRot = false;
+});
+
+window.addEventListener('mousemove', e => {
+  if (isDrag) {
+    const dx = e.clientX - lastMX, dy = e.clientY - lastMY;
+    if (Math.abs(dx) + Math.abs(dy) > 3) didDrag = true;
+    tgtTheta -= dx * .007;
+    tgtPhi    = Math.max(.18, Math.min(1.45, tgtPhi + dy * .005));
+    lastMX = e.clientX; lastMY = e.clientY;
+  }
+  // hover detection
+  mouse2D.set(
+    (e.clientX / innerWidth)  *  2 - 1,
+    (e.clientY / innerHeight) * -2 + 1
+  );
+  raycaster.setFromCamera(mouse2D, camera);
+  const hits = raycaster.intersectObjects(clickables);
+  hoveredRobot = hits.length ? (hits[0].object.userData.robotRef || null) : null;
+  document.body.style.cursor = hoveredRobot ? 'pointer' : 'default';
+});
+
+window.addEventListener('mouseup', e => {
+  isDrag = false;
+  if (!didDrag) {
+    mouse2D.set(
+      (e.clientX / innerWidth)  *  2 - 1,
+      (e.clientY / innerHeight) * -2 + 1
+    );
+    raycaster.setFromCamera(mouse2D, camera);
+    const hits = raycaster.intersectObjects(clickables);
+    if (hits.length) {
+      const key = hits[0].object.userData.agentKey;
+      if (key) selectAgent(key);
+    }
+  }
+  setTimeout(() => { autoRot = true; }, 5000);
+});
+
+window.addEventListener('wheel', e => {
+  tgtR = Math.max(18, Math.min(90, tgtR + e.deltaY * .06));
+  autoRot = false;
+  setTimeout(() => { autoRot = true; }, 3000);
+}, { passive: true });
+
+// Keyboard 0-5
+const VIEWS = {
+  '1': { th: Math.PI * 1.22, ph: .72, tx: -9, ty: 2, tz: -9, key: 'commission' },
+  '2': { th: Math.PI * 0.78, ph: .72, tx:  9, ty: 2, tz: -9, key: 'leads' },
+  '3': { th: Math.PI * 0.22, ph: .62, tx:  0, ty: 3, tz:  0, key: 'brief' },
+  '4': { th: Math.PI * 1.78, ph: .72, tx: -9, ty: 2, tz:  9, key: 'video' },
+  '5': { th: Math.PI * 0.22, ph: .72, tx:  9, ty: 2, tz:  9, key: 'ecommerce' },
+  '0': { th: Math.PI * 0.22, ph: .90, tx:  0, ty: 1, tz:  0, key: null },
+};
+window.addEventListener('keydown', e => {
+  const v = VIEWS[e.key];
+  if (!v) return;
+  tgtTheta = v.th; tgtPhi = v.ph; tgtR = 38;
+  tgtTarget.set(v.tx, v.ty, v.tz);
+  autoRot = false;
+  if (v.key) selectAgent(v.key);
+  setTimeout(() => { autoRot = true; }, 8000);
+});
+
+// ═══════════════════════════════════════════════════
+//  SIDE PANEL
+// ═══════════════════════════════════════════════════
+
+const AGENT_META = {
+  commission : { label: 'COMMISSION BOT', color: '#d97706' },
+  leads      : { label: 'LEAD BOT',       color: '#2563eb' },
+  video      : { label: 'VIDEO BOT',      color: '#ec4899' },
+  ecommerce  : { label: 'SHOP BOT',       color: '#10b981' },
+  brief      : { label: 'JARVIS CORE',    color: '#7c3aed' },
+};
+const DEMO = {
+  commission: 'Monitoring carrier commission emails.\nCorebridge · Americo · Transamerica · AmAm\nLast net: $3,240.00 commissions tracked.',
+  leads:      '5 new leads this week.\nHubSpot / GoHighLevel sync active.\nWarm pipeline: 3 prospects pending follow-up.',
+  video:      'Script queue: 2 pending.\nElevenLabs TTS synthesis ready.\nLatest: "A Love Story in 60 Seconds".',
+  ecommerce:  '3 Etsy listings drafted.\n• Midwest Grind Tee — $27.99\n• RS5 Culture Shirt — $29.99\n• Final Expense Tee — $24.99\nStatus: pending upload.',
+  brief:      'All systems nominal.\nGood morning, Jace.\nEmpire status: optimal. 5 agents active.',
+};
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function selectAgent(key) {
+  const meta = AGENT_META[key] || { label: key, color: '#7c3aed' };
+  document.getElementById('panel-title').textContent = '◈ ' + meta.label;
+  document.getElementById('panel-title').style.color = meta.color;
+  document.getElementById('panel-body').innerHTML =
+    '<div class="pv" style="color:#4b5563">Fetching from memory server...</div>';
+  document.getElementById('panel').classList.add('open');
+
+  fetch(`http://localhost:8080/api/memory/${key}`)
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(d => fillPanel(key, d, meta.color))
+    .catch(() => fillPanelOffline(key, meta.color));
+}
+
+function fillPanel(key, data, color) {
+  let h = '';
+  if (data.error) {
+    h += `<div class="pk">STATUS</div><div class="pv" style="color:#d97706">⚠ ${esc(data.error)}</div>`;
+    h += `<div class="pk" style="margin-top:16px">DEMO DATA</div><div class="pv">${esc(DEMO[key]||'')}</div>`;
+    document.getElementById('panel-body').innerHTML = h;
+    return;
+  }
+  if (key === 'brief' && Array.isArray(data.briefs)) {
+    const last = data.briefs[data.briefs.length - 1];
+    if (last) {
+      h += `<div class="pk">LAST BRIEF — ${new Date(last.timestamp).toLocaleString()}</div>`;
+      h += `<div class="pv">${esc(last.brief)}</div>`;
+    }
+    h += `<div class="pk">TOTAL BRIEFS STORED</div><div class="pv">${data.briefs.length}</div>`;
+  } else if (key === 'commission' && Array.isArray(data.records)) {
+    h += `<div class="pk">RECENT RECORDS (${data.records.length} total)</div>`;
+    data.records.slice(-5).reverse().forEach(r => {
+      h += `<div class="prow" style="color:${color}">
+        ${esc(r.carrier||'Unknown')} · ${esc(r.type)} · $${r.amount||'—'}<br>
+        <span style="font-size:11px;color:#64748b">${esc((r.description||'').substring(0,80))}</span>
+      </div>`;
+    });
+    if (data.last_updated)
+      h += `<div class="pk">UPDATED</div><div class="pv">${new Date(data.last_updated).toLocaleString()}</div>`;
+  } else if (key === 'ecommerce' && Array.isArray(data.listings)) {
+    h += `<div class="pk">LISTINGS (${data.listings.length} total)</div>`;
+    data.listings.slice(-4).reverse().forEach(l => {
+      h += `<div class="prow" style="color:${color}">
+        <strong>${esc((l.title||'Untitled').substring(0,60))}</strong><br>
+        $${l.price||'—'} · <span style="color:#94a3b8">${esc(l.status||'pending')}</span><br>
+        <span style="font-size:10px;color:#4b5563">${esc((l.tags||[]).join(' · '))}</span>
+      </div>`;
+    });
+    if (data.last_updated)
+      h += `<div class="pk">UPDATED</div><div class="pv">${new Date(data.last_updated).toLocaleString()}</div>`;
+  } else if (key === 'video') {
+    const list = data.scripts || data.records || [];
+    h += `<div class="pk">SCRIPTS (${list.length})</div>`;
+    list.slice(-3).reverse().forEach(s => {
+      const title = (s.title || s.description || 'Untitled').substring(0, 70);
+      h += `<div class="prow" style="color:${color}">${esc(title)}</div>`;
+    });
+    if (!list.length) h += `<div class="pv">${esc(DEMO.video)}</div>`;
+  } else if (key === 'leads') {
+    h += `<div class="pk">LAST RUN</div>`;
+    h += `<div class="pv">${esc(data.last_output || DEMO.leads)}</div>`;
+    const d = data.data || {};
+    if (d.new_24h !== undefined)
+      h += `<div class="pk">NEW (24H)</div><div class="pv">${d.new_24h}</div>`;
+  } else {
+    h += `<div class="pk">RAW DATA</div><div class="pv">${esc(JSON.stringify(data,null,2).substring(0,1500))}</div>`;
+  }
+  document.getElementById('panel-body').innerHTML = h || `<div class="pv">${esc(DEMO[key]||'')}</div>`;
+}
+
+function fillPanelOffline(key, color) {
+  document.getElementById('panel-body').innerHTML =
+    `<div class="pk">SERVER STATUS</div>` +
+    `<div class="pv" style="color:#d97706">⚠ Memory server offline<br>` +
+    `Run <code style="color:#7c3aed">python memory_server.py</code> to load live data.</div>` +
+    `<div class="pk" style="margin-top:16px">DEMO DATA</div>` +
+    `<div class="pv">${esc(DEMO[key]||'')}</div>`;
+}
+
+function closePanel() {
+  document.getElementById('panel').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════════════
+//  CLOCK HUD
+// ═══════════════════════════════════════════════════
+
+function updateClock() {
+  const n = new Date();
+  document.getElementById('hud-clock').textContent =
+    n.toLocaleTimeString('en-US', { hour12: false });
+  document.getElementById('hud-date').textContent =
+    n.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'short', day:'numeric' }).toUpperCase();
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ═══════════════════════════════════════════════════
+//  ANIMATION LOOP
+// ═══════════════════════════════════════════════════
+
+const clock3 = new THREE.Clock();
+let T = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock3.getDelta(), .05);
+  T += dt;
+
+  // ── CAMERA LERP ──
+  if (autoRot && !isDrag) tgtTheta += dt * .055;
+  camTheta += (tgtTheta - camTheta) * .04;
+  camPhi   += (tgtPhi   - camPhi)   * .04;
+  camR     += (tgtR     - camR)     * .06;
+  camTarget.lerp(tgtTarget, .05);
+  syncCamera();
+
+  // ── ROBOTS WALK ──
+  allRobots.forEach(rb => {
+    if (rb.userData.isJarvis) {
+      rb.rotation.y = T * .28;
+      rb.position.y = Math.sin(T * .75) * .07;
+      return;
+    }
+    const ph = rb.userData.walkPhase;
+    const wave = Math.sin(T * .48 + ph);
+    if (rb.userData.walkAxisX) {
+      rb.position.x = rb.userData.walkCenterX + wave * 2.6;
+      rb.rotation.y = Math.cos(T * .48 + ph) > 0 ? 0 : Math.PI;
+    } else {
+      rb.position.z = rb.userData.walkCenterZ + wave * 2.6;
+      rb.rotation.y = Math.cos(T * .48 + ph) > 0 ? -Math.PI/2 : Math.PI/2;
+    }
+    // bob
+    rb.position.y = Math.abs(Math.sin(T * 1.8 + ph)) * .09;
+  });
+
+  // ── HEAD LOOK (hover) ──
+  allRobots.forEach(rb => {
+    const hd = rb.userData.head;
+    if (!hd) return;
+    if (rb === hoveredRobot) {
+      const wp = new THREE.Vector3();
+      rb.getWorldPosition(wp);
+      const dir = camera.position.clone().sub(wp).normalize();
+      const ang = Math.atan2(dir.x, dir.z) - rb.rotation.y;
+      hd.rotation.y += (ang - hd.rotation.y) * .12;
+      hd.rotation.x += (-.2 - hd.rotation.x) * .1;
+    } else {
+      hd.rotation.y += (0 - hd.rotation.y) * .06;
+      hd.rotation.x += (0 - hd.rotation.x) * .06;
+    }
+  });
+
+  // ── JARVIS ORB PULSE ──
+  const pulse = .9 + Math.sin(T * 1.15) * .1;
+  orbGrp.scale.setScalar(pulse);
+  lJarvis.intensity = 5 + Math.sin(T * 1.15) * 2;
+
+  // ── ORB RINGS ROTATE ──
+  orbRings.forEach((rg, i) => {
+    rg.rotation.y += dt * (.38 + i * .13);
+    rg.rotation.x += dt * (.15 - i * .04);
+    rg.material.opacity = .3 + Math.sin(T * .7 + i * 1.2) * .18;
+  });
+
+  // ── SIGNAL RINGS (leads) ──
+  signalRings.forEach(rg => {
+    const idx = rg.userData.ringIdx;
+    const frac = ((T * .4 + idx * .3) % 1);
+    rg.scale.setScalar(1 + frac * .9);
+    rg.material.opacity = (1 - frac) * .55;
+  });
+
+  // ── ROOM LIGHT FLICKER ──
+  roomLights.forEach(({ l, base }) => {
+    l.intensity = base + Math.sin(T * 3.3 + l.position.x * .7) * .09;
+  });
+
+  // ── PARTICLES FLOAT ──
+  allParticles.forEach(pts => {
+    const pos = pts.geometry.attributes.position.array;
+    const vel = pts.userData.vel;
+    const n   = pts.userData.count;
+    for (let i = 0; i < n; i++) {
+      pos[i*3+1] += vel[i] * dt;
+      if (pos[i*3+1] > 6) pos[i*3+1] = 0;
+    }
+    pts.geometry.attributes.position.needsUpdate = true;
+  });
+
+  renderer.render(scene, camera);
+}
+
+animate();
+
+// ═══════════════════════════════════════════════════
+//  RESIZE
+// ═══════════════════════════════════════════════════
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

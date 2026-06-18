@@ -1,216 +1,185 @@
 """
-Jarvis — Daily Intelligence Orchestrator
-Runs all agents at 9am and sends a consolidated brief via email.
+main.py — Jarvis Agent Orchestrator
+Runs all agents on schedule and sends daily briefs via Telnyx SMS.
 
 Usage:
-  1. Fill in .env with your credentials and goals
-  2. pip install -r requirements.txt
-  3. python main.py           (runs on schedule — keep the window open)
-     python main.py --now     (fire immediately for testing)
+  python main.py          — starts the scheduler (keeps running)
+  python main.py --now    — fires run_all_agents() immediately, then exits
 """
+import json
 import os
 import sys
-import schedule
+import threading
 import time
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from datetime import datetime
+from pathlib import Path
+
+import requests
+import schedule
 from dotenv import load_dotenv
 
 load_dotenv()
 
+from jarvis import build_daily_brief
+from sms import start_sms_server
 from agents import (
     CommissionAgent,
-    VideoPipelineAgent,
     LeadMonitorAgent,
     EcommerceAgent,
+    VideoPipelineAgent,
     IncomeGoalsAgent,
+    VideoScriptAgent,
 )
 
-AGENTS = [
-    IncomeGoalsAgent(),
-    CommissionAgent(),
-    LeadMonitorAgent(),
-    EcommerceAgent(),
-    VideoPipelineAgent(),
-]
+# ── Folder setup ──────────────────────────────────────────────────────────────
 
-AGENT_DESCRIPTIONS = {
-    "income_goals":    "Tracks your monthly/annual premium and commission targets",
-    "commission":      "Monitors policy commissions from Airtable or Google Sheets",
-    "lead_monitor":    "Pulls new leads from HubSpot or GoHighLevel",
-    "ecommerce":       "Reports on Shopify or WooCommerce orders and revenue",
-    "video_pipeline":  "Pulls YouTube channel stats and recent video performance",
-}
+ROOT = Path(__file__).parent
+(ROOT / "outputs").mkdir(exist_ok=True)
+(ROOT / "memory").mkdir(exist_ok=True)
 
+BRIEFS_FILE = ROOT / "memory" / "daily_briefs.json"
 
-def run_all_agents() -> list[tuple[str, str]]:
-    results = []
-    for agent in AGENTS:
-        print(f"[{datetime.now():%H:%M:%S}] Running {agent.name}...")
-        try:
-            output = agent.run()
-        except Exception as e:
-            output = f"{agent.name.upper()}\n  Error: {e}"
-        results.append((agent.name, output))
-        print(f"  Done.")
-    return results
+# ── Agent instances ───────────────────────────────────────────────────────────
+
+commission = CommissionAgent()
+leads      = LeadMonitorAgent()
+ecommerce  = EcommerceAgent()
+video      = VideoPipelineAgent()
+income     = IncomeGoalsAgent()
+script     = VideoScriptAgent()
+
+# Agents included in the full daily brief
+ALL_AGENTS = [income, commission, leads, ecommerce, video, script]
+
+# ── SMS helper ────────────────────────────────────────────────────────────────
+
+_TELNYX_URL = "https://api.telnyx.com/v2/messages"
 
 
-def build_brief(results: list[tuple[str, str]]) -> tuple[str, str]:
-    now = datetime.now()
-    date_str = now.strftime("%A, %B %d %Y")
-    time_str = now.strftime("%I:%M %p")
+def _send_sms(body: str) -> None:
+    """Send a message to YOUR_NUMBER via Telnyx."""
+    api_key     = os.getenv("TELNYX_API_KEY")
+    from_number = os.getenv("TELNYX_NUMBER")
+    to_number   = os.getenv("YOUR_NUMBER")
 
-    divider = "=" * 48
-
-    # Plain-text version
-    plain_lines = [
-        f"JARVIS DAILY BRIEF",
-        f"{date_str}  •  {time_str} Central",
-        divider,
-        "",
-        "AI AGENTS RUNNING TODAY",
-        divider,
-    ]
-    for name, _ in results:
-        desc = AGENT_DESCRIPTIONS.get(name, "")
-        status = "✓ Active"
-        plain_lines.append(f"  {name.replace('_', ' ').title():<22} {status}  —  {desc}")
-
-    plain_lines += ["", divider, ""]
-
-    for _, output in results:
-        plain_lines.append(output)
-        plain_lines.append("")
-
-    plain_lines += [
-        divider,
-        f"Sent by Jarvis  •  {now.strftime('%Y-%m-%d %H:%M')}",
-    ]
-
-    plain = "\n".join(plain_lines)
-
-    # HTML version
-    agent_rows = ""
-    for name, _ in results:
-        desc = AGENT_DESCRIPTIONS.get(name, "")
-        agent_rows += (
-            f"<tr>"
-            f"<td style='padding:4px 10px 4px 0;font-weight:600;color:#1a1a2e;white-space:nowrap'>"
-            f"{name.replace('_', ' ').title()}</td>"
-            f"<td style='padding:4px 10px;color:#22c55e;font-weight:600'>✓ Active</td>"
-            f"<td style='padding:4px 0;color:#555'>{desc}</td>"
-            f"</tr>"
-        )
-
-    report_sections = ""
-    for _, output in results:
-        lines = output.split("\n")
-        header = lines[0] if lines else ""
-        body = "\n".join(lines[1:]) if len(lines) > 1 else ""
-        report_sections += f"""
-        <div style='margin-bottom:20px;background:#f8f9fa;border-left:4px solid #1a1a2e;border-radius:4px;padding:14px 16px'>
-          <div style='font-weight:700;font-size:13px;color:#1a1a2e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px'>{header}</div>
-          <pre style='margin:0;font-family:monospace;font-size:13px;color:#333;white-space:pre-wrap'>{body.strip()}</pre>
-        </div>"""
-
-    html = f"""<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"></head>
-<body style='margin:0;padding:0;background:#f0f2f5;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'>
-  <div style='max-width:600px;margin:24px auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)'>
-
-    <!-- Header -->
-    <div style='background:#1a1a2e;padding:28px 28px 20px'>
-      <div style='font-size:11px;color:#94a3b8;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px'>Jarvis Daily Brief</div>
-      <div style='font-size:22px;font-weight:700;color:#fff'>{date_str}</div>
-      <div style='font-size:13px;color:#94a3b8;margin-top:4px'>{time_str} Central</div>
-    </div>
-
-    <!-- Agent roster -->
-    <div style='padding:20px 28px 10px'>
-      <div style='font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px'>AI Agents Running Today</div>
-      <table style='border-collapse:collapse;width:100%;font-size:13px'>
-        {agent_rows}
-      </table>
-    </div>
-
-    <hr style='border:none;border-top:1px solid #e5e7eb;margin:4px 28px'>
-
-    <!-- Reports -->
-    <div style='padding:16px 28px 24px'>
-      <div style='font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px'>Agent Reports</div>
-      {report_sections}
-    </div>
-
-    <!-- Footer -->
-    <div style='background:#f8f9fa;padding:14px 28px;border-top:1px solid #e5e7eb'>
-      <div style='font-size:11px;color:#9ca3af'>Sent by Jarvis  •  {now.strftime("%Y-%m-%d %H:%M")}</div>
-    </div>
-
-  </div>
-</body>
-</html>"""
-
-    return plain, html
-
-
-def send_email(plain: str, html: str) -> bool:
-    gmail_user = os.getenv("GMAIL_ADDRESS")
-    gmail_pass = os.getenv("GMAIL_APP_PASSWORD")
-    to_email = os.getenv("EMAIL_TO")
-
-    if not all([gmail_user, gmail_pass, to_email]):
-        print("[EMAIL] Gmail credentials missing in .env — skipping email.")
-        return False
-
-    now = datetime.now()
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"Jarvis Daily Brief — {now.strftime('%b %d %Y')}"
-    msg["From"] = gmail_user
-    msg["To"] = to_email
-    msg.attach(MIMEText(plain, "plain"))
-    msg.attach(MIMEText(html, "html"))
-
-    try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(gmail_user, gmail_pass)
-            server.sendmail(gmail_user, to_email, msg.as_string())
-        print(f"[EMAIL] Sent to {to_email}")
-        return True
-    except Exception as e:
-        print(f"[EMAIL] Failed: {e}")
-        return False
-
-
-def daily_job():
-    print(f"\n{'='*50}")
-    print(f"  JARVIS FIRING — {datetime.now():%Y-%m-%d %H:%M:%S}")
-    print(f"{'='*50}\n")
-
-    results = run_all_agents()
-    plain, html = build_brief(results)
-
-    print("\n" + plain)
-    send_email(plain, html)
-    print("\nBrief complete.\n")
-
-
-def main():
-    brief_time = os.getenv("DAILY_BRIEF_TIME", "09:00")
-    schedule.every().day.at(brief_time).do(daily_job)
-    print(f"Jarvis scheduled — daily brief at {brief_time} local time.")
-    print("Press Ctrl+C to stop.\n")
-
-    if "--now" in sys.argv:
-        daily_job()
+    if not all([api_key, from_number, to_number]):
+        print("[SMS] Telnyx credentials missing (TELNYX_API_KEY / TELNYX_NUMBER / YOUR_NUMBER) — skipping.")
         return
 
+    # SMS segments cap at ~1600 chars; truncate gracefully
+    if len(body) > 1600:
+        body = body[:1597] + "..."
+
+    try:
+        resp = requests.post(
+            _TELNYX_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={"from": from_number, "to": to_number, "text": body},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        print(f"[SMS] Brief delivered to {to_number}")
+    except Exception as e:
+        print(f"[SMS] Send failed: {e}")
+
+
+# ── Brief persistence ─────────────────────────────────────────────────────────
+
+
+def _save_brief(brief: str) -> None:
+    """Append the brief to memory/daily_briefs.json."""
+    if BRIEFS_FILE.exists():
+        with open(BRIEFS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    else:
+        data = {"briefs": []}
+
+    data["briefs"].append({
+        "timestamp": datetime.now().isoformat(),
+        "brief": brief,
+    })
+
+    with open(BRIEFS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+# ── Core orchestration ────────────────────────────────────────────────────────
+
+
+def run_all_agents() -> None:
+    """Run every agent, build a Jarvis brief, SMS it, and persist it."""
+    print(f"\n{'=' * 52}")
+    print(f"  JARVIS FIRING — {datetime.now():%Y-%m-%d %H:%M:%S}")
+    print(f"{'=' * 52}\n")
+
+    results: dict[str, str] = {}
+    for agent in ALL_AGENTS:
+        print(f"[{datetime.now():%H:%M:%S}] Running {agent.name}...")
+        try:
+            results[agent.name] = agent.run()
+        except Exception as e:
+            results[agent.name] = f"{agent.name.upper()}\n  Error: {e}"
+        print("  Done.")
+
+    brief = build_daily_brief(agent_results=results)
+    print("\n" + brief + "\n")
+
+    _send_sms(brief)
+    _save_brief(brief)
+    print("Brief complete.\n")
+
+
+# ── Scheduler helpers ─────────────────────────────────────────────────────────
+
+
+def _threaded(fn):
+    """Launch fn in a daemon thread so agents never block the scheduler."""
+    threading.Thread(target=fn, daemon=True).start()
+
+
+def _schedule_jobs() -> None:
+    schedule.every().day.at("08:00").do(lambda: _threaded(run_all_agents))
+    schedule.every(6).hours.do(lambda: _threaded(leads.run))
+    schedule.every().monday.at("09:00").do(lambda: _threaded(commission.run))
+    schedule.every().day.at("20:00").do(lambda: _threaded(video.run))
+
+
+def _scheduler_loop() -> None:
     while True:
         schedule.run_pending()
         time.sleep(30)
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+
+
+def main() -> None:
+    _schedule_jobs()
+
+    print("Jarvis online.")
+    print("  08:00 daily     → all agents + SMS brief")
+    print("  every 6 hours   → leads monitor")
+    print("  Monday 09:00    → commission check")
+    print("  20:00 daily     → video pipeline")
+    print("  SMS webhook     → http://0.0.0.0:5000/sms")
+    print("\nPress Ctrl+C to stop.\n")
+
+    # SMS webhook server in daemon thread
+    threading.Thread(target=start_sms_server, daemon=True).start()
+
+    # Scheduler in daemon thread — main thread stays as the process anchor
+    threading.Thread(target=_scheduler_loop, daemon=True).start()
+
+    if "--now" in sys.argv:
+        run_all_agents()
+        return
+
+    # Keep the process alive
+    while True:
+        time.sleep(1)
 
 
 if __name__ == "__main__":

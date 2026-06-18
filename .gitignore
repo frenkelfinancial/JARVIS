@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 *.pyo
 memory.json
+memory/
+outputs/
+*.mp3

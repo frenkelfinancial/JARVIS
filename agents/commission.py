@@ -1,108 +1,275 @@
 """
-Commission Tracking Agent
-Supports: Google Sheets or Airtable as data source.
-Set GOOGLE_SHEETS_CREDENTIALS_JSON + COMMISSION_SHEET_ID  — OR —
-    AIRTABLE_API_KEY + AIRTABLE_BASE_ID + AIRTABLE_COMMISSION_TABLE
+Commission Agent — reads carrier commission emails via Gmail API,
+uses Claude to extract structured data, saves to memory/commission_memory.json.
+
+Setup:
+  1. Create OAuth credentials at console.cloud.google.com → APIs & Services
+     → Credentials → OAuth 2.0 Client IDs (Desktop app)
+  2. Download as credentials.json and place it in the Jarvis root folder
+  3. First run opens a browser to authorize Gmail read access
+  4. token.pickle is written automatically for all future runs
 """
 import os
 import json
-import requests
-from datetime import date, timedelta
+import pickle
+import base64
+import re
+from pathlib import Path
+from datetime import datetime
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+import anthropic
+from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
 import memory_store
 
+SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+
+JARVIS_ROOT = Path(__file__).parent.parent
+CREDENTIALS_PATH = JARVIS_ROOT / "credentials.json"
+TOKEN_PATH = JARVIS_ROOT / "token.pickle"
+MEMORY_PATH = JARVIS_ROOT / "memory" / "commission_memory.json"
+
+CARRIERS = [
+    "corebridge",
+    "americo",
+    "transamerica",
+    "american-amicable",
+    "american amicable",
+    "family first life",
+]
+
+KEYWORDS = [
+    "commission statement",
+    "policy issued",
+    "chargeback",
+]
+
+
+# ── Gmail auth ────────────────────────────────────────────────────────────────
+
+def _get_gmail_service():
+    creds = None
+
+    if TOKEN_PATH.exists():
+        with open(TOKEN_PATH, "rb") as f:
+            creds = pickle.load(f)
+
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                str(CREDENTIALS_PATH), SCOPES
+            )
+            creds = flow.run_local_server(port=0)
+        with open(TOKEN_PATH, "wb") as f:
+            pickle.dump(creds, f)
+
+    return build("gmail", "v1", credentials=creds)
+
+
+# ── Gmail search ──────────────────────────────────────────────────────────────
+
+def _build_query() -> str:
+    carrier_terms = " OR ".join(
+        f'"{c}"' for c in CARRIERS
+    )
+    keyword_terms = " OR ".join(
+        f'"{k}"' for k in KEYWORDS
+    )
+    return f"({carrier_terms}) ({keyword_terms})"
+
+
+def _extract_text(payload: dict) -> str:
+    """Recursively pull plain-text body from a Gmail message payload."""
+    body_data = payload.get("body", {}).get("data", "")
+    if body_data:
+        return base64.urlsafe_b64decode(body_data).decode("utf-8", errors="ignore")
+
+    for part in payload.get("parts", []):
+        if part.get("mimeType") == "text/plain":
+            data = part.get("body", {}).get("data", "")
+            if data:
+                return base64.urlsafe_b64decode(data).decode("utf-8", errors="ignore")
+        # recurse into multipart
+        if part.get("parts"):
+            result = _extract_text(part)
+            if result:
+                return result
+    return ""
+
+
+def _fetch_email(service, msg_id: str) -> tuple[str, str]:
+    msg = service.users().messages().get(
+        userId="me", id=msg_id, format="full"
+    ).execute()
+
+    subject = ""
+    for header in msg.get("payload", {}).get("headers", []):
+        if header["name"].lower() == "subject":
+            subject = header["value"]
+            break
+
+    snippet = msg.get("snippet", "")
+    body = _extract_text(msg.get("payload", {}))
+    # cap body length sent to Claude
+    content = (snippet + "\n" + body)[:3000]
+    return subject, content
+
+
+# ── Claude extraction ─────────────────────────────────────────────────────────
+
+def _parse_with_claude(subject: str, body: str) -> dict:
+    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+    prompt = (
+        "You are parsing a life insurance commission email. "
+        "Return ONLY a JSON object — no explanation.\n\n"
+        f"Subject: {subject}\n"
+        f"Email excerpt:\n{body}\n\n"
+        "JSON fields:\n"
+        '  "carrier": carrier name string or null\n'
+        '  "amount": dollar amount as a number or null\n'
+        '  "policy_number": policy number string or null\n'
+        '  "type": "commission" or "chargeback"\n'
+        '  "description": one-line plain-English summary\n'
+    )
+
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=512,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    text = response.content[0].text.strip()
+    # strip markdown fences if present
+    text = re.sub(r"^```[a-z]*\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return {
+            "carrier": None,
+            "amount": None,
+            "policy_number": None,
+            "type": "commission",
+            "description": subject[:120],
+        }
+
+
+# ── Memory helpers ────────────────────────────────────────────────────────────
+
+def _load_commission_memory() -> dict:
+    if MEMORY_PATH.exists():
+        with open(MEMORY_PATH, "r") as f:
+            return json.load(f)
+    return {"records": [], "last_updated": None}
+
+
+def _save_commission_memory(data: dict):
+    MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    data["last_updated"] = datetime.now().isoformat()
+    with open(MEMORY_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+# ── Agent ─────────────────────────────────────────────────────────────────────
 
 class CommissionAgent:
     name = "commission"
 
     def run(self) -> str:
+        if not os.getenv("ANTHROPIC_API_KEY"):
+            return "COMMISSION\n  Skipped — ANTHROPIC_API_KEY not set in .env"
+
+        if not CREDENTIALS_PATH.exists():
+            return (
+                "COMMISSION\n"
+                "  Skipped — credentials.json not found.\n"
+                "  Create OAuth credentials at console.cloud.google.com\n"
+                "  and save as credentials.json in the Jarvis folder."
+            )
+
         try:
-            if os.getenv("AIRTABLE_API_KEY"):
-                return self._run_airtable()
-            elif os.getenv("GOOGLE_SHEETS_CREDENTIALS_JSON"):
-                return self._run_sheets()
-            else:
-                return self._run_demo()
+            service = _get_gmail_service()
         except Exception as e:
-            msg = f"Commission Agent error: {e}"
-            memory_store.update_agent(self.name, msg)
-            return msg
+            return f"COMMISSION\n  Gmail auth failed: {e}"
 
-    # ── Airtable ──────────────────────────────────────────────
+        query = _build_query()
+        try:
+            results = service.users().messages().list(
+                userId="me", q=query, maxResults=25
+            ).execute()
+        except Exception as e:
+            return f"COMMISSION\n  Gmail search error: {e}"
 
-    def _run_airtable(self) -> str:
-        api_key = os.environ["AIRTABLE_API_KEY"]
-        base_id = os.environ["AIRTABLE_BASE_ID"]
-        table = os.environ.get("AIRTABLE_COMMISSION_TABLE", "Commissions")
-        today = date.today()
-        week_ago = today - timedelta(days=7)
+        messages = results.get("messages", [])
 
-        url = f"https://api.airtable.com/v0/{base_id}/{table}"
-        headers = {"Authorization": f"Bearer {api_key}"}
-        params = {
-            "filterByFormula": f"AND(IS_AFTER({{Date}}, '{week_ago}'), IS_BEFORE({{Date}}, '{today + timedelta(days=1)}'))",
-            "fields[]": ["Policy Number", "Carrier", "Commission Amount", "Status", "Date"],
-        }
-        resp = requests.get(url, headers=headers, params=params, timeout=15)
-        resp.raise_for_status()
-        records = resp.json().get("records", [])
+        memory = _load_commission_memory()
+        seen_ids = {r.get("gmail_id") for r in memory.get("records", [])}
 
-        total = sum(float(r["fields"].get("Commission Amount", 0)) for r in records)
-        pending = [r for r in records if r["fields"].get("Status") == "Pending"]
-        paid = [r for r in records if r["fields"].get("Status") == "Paid"]
-
-        summary = (
-            f"COMMISSIONS (7-day)\n"
-            f"  Policies tracked: {len(records)}\n"
-            f"  Total: ${total:,.2f}\n"
-            f"  Paid: {len(paid)} | Pending: {len(pending)}"
-        )
-        memory_store.update_agent(self.name, summary, {"total": total, "count": len(records)})
-        return summary
-
-    # ── Google Sheets ─────────────────────────────────────────
-
-    def _run_sheets(self) -> str:
-        from google.oauth2.service_account import Credentials
-        from googleapiclient.discovery import build
-
-        creds_path = os.environ["GOOGLE_SHEETS_CREDENTIALS_JSON"]
-        sheet_id = os.environ["COMMISSION_SHEET_ID"]
-        creds = Credentials.from_service_account_file(
-            creds_path, scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
-        )
-        service = build("sheets", "v4", credentials=creds)
-        result = (
-            service.spreadsheets()
-            .values()
-            .get(spreadsheetId=sheet_id, range="Sheet1!A2:E")
-            .execute()
-        )
-        rows = result.get("values", [])
-
-        total = 0.0
-        for row in rows:
+        new_records = []
+        for msg in messages:
+            if msg["id"] in seen_ids:
+                continue
             try:
-                total += float(str(row[3]).replace("$", "").replace(",", ""))
-            except (IndexError, ValueError):
-                pass
+                subject, body = _fetch_email(service, msg["id"])
+                parsed = _parse_with_claude(subject, body)
+                parsed["gmail_id"] = msg["id"]
+                parsed["fetched_at"] = datetime.now().isoformat()
+                new_records.append(parsed)
+            except Exception:
+                continue
 
-        summary = (
-            f"COMMISSIONS (Sheets)\n"
-            f"  Rows found: {len(rows)}\n"
-            f"  Total: ${total:,.2f}"
+        if new_records:
+            memory.setdefault("records", []).extend(new_records)
+            _save_commission_memory(memory)
+
+        # ── build summary ──────────────────────────────────────
+        all_records = memory.get("records", [])
+        commissions = [
+            r for r in all_records
+            if r.get("type") == "commission" and isinstance(r.get("amount"), (int, float))
+        ]
+        chargebacks = [
+            r for r in all_records
+            if r.get("type") == "chargeback" and isinstance(r.get("amount"), (int, float))
+        ]
+
+        total_in = sum(r["amount"] for r in commissions)
+        total_cb = sum(r["amount"] for r in chargebacks)
+        net = total_in - total_cb
+
+        lines = []
+        if commissions:
+            lines.append(
+                f"{len(commissions)} commission{'s' if len(commissions) != 1 else ''} "
+                f"totaling ${total_in:,.2f}"
+            )
+        if chargebacks:
+            cb = chargebacks[-1]
+            carrier = cb.get("carrier") or "unknown carrier"
+            amt = cb.get("amount", 0)
+            lines.append(
+                f"{len(chargebacks)} chargeback{'s' if len(chargebacks) != 1 else ''} "
+                f"from {carrier} for ${amt:,.2f}"
+            )
+        if lines:
+            lines.append(f"Net: ${net:,.2f}")
+
+        body_text = ". ".join(lines) if lines else "No commission records yet."
+        new_label = f"({len(new_records)} new)" if new_records else "(no new emails)"
+        summary = f"COMMISSION  {new_label}\n  {body_text}"
+
+        memory_store.update_agent(
+            self.name,
+            summary,
+            {"total_commissions": total_in, "total_chargebacks": total_cb, "net": net},
         )
-        memory_store.update_agent(self.name, summary, {"total": total, "rows": len(rows)})
         return summary
-
-    # ── Demo / no credentials ─────────────────────────────────
-
-    def _run_demo(self) -> str:
-        prev = memory_store.get_agent(self.name)
-        prev_total = prev.get("data", {}).get("total", 0)
-        msg = (
-            f"COMMISSIONS\n"
-            f"  [Demo mode — connect Airtable or Google Sheets via .env]\n"
-            f"  Last recorded total: ${prev_total:,.2f}"
-        )
-        memory_store.update_agent(self.name, msg)
-        return msg

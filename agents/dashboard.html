@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jarvis — Isometric Agent Dashboard</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --floor: #1a2035;
+    --wall-left: #141c2e;
+    --wall-right: #0f1525;
+    --accent: #00d4ff;
+    --accent2: #7c3aed;
+    --accent3: #10b981;
+    --accent4: #f59e0b;
+    --text: #e2e8f0;
+    --dim: #64748b;
+    --glow: rgba(0,212,255,0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    font-family: 'Courier New', monospace;
+    color: var(--text);
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ─── TOP BAR ─── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 24px;
+    background: rgba(10,14,26,0.9);
+    border-bottom: 1px solid rgba(0,212,255,0.2);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+    flex-shrink: 0;
+  }
+  .topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .topbar-brand .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  .topbar-stats {
+    display: flex;
+    gap: 24px;
+    font-size: 11px;
+  }
+  .topbar-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .topbar-stat .val { color: var(--accent); font-size: 16px; font-weight: 700; }
+  .topbar-stat .lbl { color: var(--dim); letter-spacing: 1px; text-transform: uppercase; }
+  .topbar-time { font-size: 12px; color: var(--dim); letter-spacing: 1px; }
+
+  /* ─── MAIN LAYOUT ─── */
+  .main {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* ─── LEFT SIDEBAR ─── */
+  .sidebar-left {
+    width: 220px;
+    background: rgba(10,14,26,0.8);
+    border-right: 1px solid rgba(0,212,255,0.1);
+    padding: 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+  .sidebar-section-title {
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--dim);
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .agent-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(0,212,255,0.1);
+    border-radius: 6px;
+    padding: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .agent-card:hover { background: rgba(0,212,255,0.05); border-color: rgba(0,212,255,0.3); }
+  .agent-card.active { border-color: var(--accent); background: rgba(0,212,255,0.08); }
+  .agent-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .agent-icon { font-size: 18px; }
+  .agent-name { font-size: 12px; font-weight: 700; }
+  .agent-role { font-size: 10px; color: var(--dim); }
+  .agent-status {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 10px;
+  }
+  .status-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .status-dot.working { background: var(--accent3); box-shadow: 0 0 6px var(--accent3); animation: pulse 1.2s infinite; }
+  .status-dot.idle { background: var(--dim); }
+  .status-dot.processing { background: var(--accent4); box-shadow: 0 0 6px var(--accent4); animation: pulse 0.8s infinite; }
+  .status-dot.error { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+  .progress-bar {
+    height: 3px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+    margin-top: 6px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent);
+    transition: width 0.3s ease;
+  }
+
+  /* ─── ISOMETRIC CANVAS AREA ─── */
+  .iso-area {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at 50% 60%, rgba(0,212,255,0.04) 0%, transparent 70%);
+  }
+
+  canvas#isoCanvas {
+    display: block;
+    image-rendering: pixelated;
+  }
+
+  /* ─── FLOATING HUD ELEMENTS ─── */
+  .hud-corner {
+    position: absolute;
+    top: 16px; left: 16px;
+    background: rgba(10,14,26,0.7);
+    border: 1px solid rgba(0,212,255,0.2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 10px;
+    backdrop-filter: blur(8px);
+    min-width: 160px;
+  }
+  .hud-corner h4 { color: var(--accent); font-size: 9px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+  .hud-row { display: flex; justify-content: space-between; margin-bottom: 4px; color: var(--dim); }
+  .hud-row span:last-child { color: var(--text); }
+
+  .hud-log {
+    position: absolute;
+    bottom: 16px; left: 16px;
+    right: 16px;
+    background: rgba(10,14,26,0.75);
+    border: 1px solid rgba(0,212,255,0.15);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 10px;
+    backdrop-filter: blur(8px);
+    max-height: 80px;
+    overflow: hidden;
+  }
+  .hud-log h4 { color: var(--accent); letter-spacing: 2px; text-transform: uppercase; font-size: 9px; margin-bottom: 6px; }
+  .log-lines { display: flex; flex-direction: column; gap: 2px; }
+  .log-line { display: flex; gap: 8px; }
+  .log-time { color: var(--accent2); }
+  .log-msg { color: var(--dim); }
+  .log-msg.highlight { color: var(--accent3); }
+
+  /* ─── RIGHT SIDEBAR ─── */
+  .sidebar-right {
+    width: 240px;
+    background: rgba(10,14,26,0.8);
+    border-left: 1px solid rgba(0,212,255,0.1);
+    padding: 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+  .task-item {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 10px;
+    transition: all 0.2s;
+  }
+  .task-item.running { border-color: rgba(0,212,255,0.3); background: rgba(0,212,255,0.04); }
+  .task-item.done { border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.03); }
+  .task-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .task-name { font-weight: 700; font-size: 11px; }
+  .task-badge {
+    font-size: 8px; padding: 2px 6px; border-radius: 3px;
+    text-transform: uppercase; letter-spacing: 1px; font-weight: 700;
+  }
+  .badge-running { background: rgba(0,212,255,0.2); color: var(--accent); }
+  .badge-done { background: rgba(16,185,129,0.2); color: var(--accent3); }
+  .badge-queued { background: rgba(100,116,139,0.2); color: var(--dim); }
+  .task-desc { color: var(--dim); line-height: 1.5; margin-bottom: 6px; }
+  .task-progress { height: 2px; background: rgba(255,255,255,0.05); border-radius: 1px; overflow: hidden; }
+  .task-progress-fill { height: 100%; border-radius: 1px; }
+  .fill-cyan { background: var(--accent); }
+  .fill-green { background: var(--accent3); }
+  .fill-purple { background: var(--accent2); }
+
+  .output-panel {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(0,212,255,0.1);
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 10px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .output-panel h4 { color: var(--accent); font-size: 9px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+  .output-line { color: var(--dim); line-height: 1.8; }
+  .output-line .prefix { color: var(--accent2); }
+  .output-line .ok { color: var(--accent3); }
+  .output-line .warn { color: var(--accent4); }
+
+  /* ─── ANIMATIONS ─── */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  @keyframes scanline {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100vh); }
+  }
+
+  .scanline-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(transparent, rgba(0,212,255,0.03), transparent);
+    animation: scanline 6s linear infinite;
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  /* ─── TOOLTIP ─── */
+  .tooltip {
+    position: absolute;
+    background: rgba(10,14,26,0.95);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 10px;
+    pointer-events: none;
+    z-index: 200;
+    display: none;
+    white-space: nowrap;
+  }
+  .tooltip.visible { display: block; }
+  .tooltip-name { color: var(--accent); font-weight: 700; font-size: 11px; }
+  .tooltip-task { color: var(--dim); margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<div class="scanline-overlay"></div>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <div class="dot"></div>
+    JARVIS — AGENT COMMAND CENTER
+  </div>
+  <div class="topbar-stats">
+    <div class="topbar-stat"><span class="val" id="statAgents">6</span><span class="lbl">Agents</span></div>
+    <div class="topbar-stat"><span class="val" id="statTasks">3</span><span class="lbl">Active</span></div>
+    <div class="topbar-stat"><span class="val" id="statComplete">12</span><span class="lbl">Done</span></div>
+    <div class="topbar-stat"><span class="val" id="statTokens">47.2k</span><span class="lbl">Tokens</span></div>
+  </div>
+  <div class="topbar-time" id="clock">--:--:--</div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- LEFT SIDEBAR: AGENT ROSTER -->
+  <div class="sidebar-left">
+    <div class="sidebar-section-title">Agent Roster</div>
+
+    <div class="agent-card active" data-id="0">
+      <div class="agent-card-header">
+        <span class="agent-icon">🎬</span>
+        <div><div class="agent-name">VIDEO SCRIPT</div><div class="agent-role">Claude + ElevenLabs</div></div>
+      </div>
+      <div class="agent-status"><div class="status-dot working"></div><span>Generating script…</span></div>
+      <div class="progress-bar"><div class="progress-fill" id="pb0" style="width:68%"></div></div>
+    </div>
+
+    <div class="agent-card" data-id="1">
+      <div class="agent-card-header">
+        <span class="agent-icon">📊</span>
+        <div><div class="agent-name">INCOME</div><div class="agent-role">Goal Tracker</div></div>
+      </div>
+      <div class="agent-status"><div class="status-dot idle"></div><span>Standing by</span></div>
+      <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+    </div>
+
+    <div class="agent-card" data-id="2">
+      <div class="agent-card-header">
+        <span class="agent-icon">💰</span>
+        <div><div class="agent-name">COMMISSION</div><div class="agent-role">Carrier Earnings</div></div>
+      </div>
+      <div class="agent-status"><div class="status-dot processing"></div><span>Parsing emails…</span></div>
+      <div class="progress-bar"><div class="progress-fill" id="pb2" style="width:41%"></div></div>
+    </div>
+
+    <div class="agent-card" data-id="3">
+      <div class="agent-card-header">
+        <span class="agent-icon">📋</span>
+        <div><div class="agent-name">LEADS</div><div class="agent-role">Lead Monitor</div></div>
+      </div>
+      <div class="agent-status"><div class="status-dot working"></div><span>Pulling from GHL</span></div>
+      <div class="progress-bar"><div class="progress-fill" id="pb3" style="width:75%"></div></div>
+    </div>
+
+    <div class="agent-card" data-id="4">
+      <div class="agent-card-header">
+        <span class="agent-icon">🛒</span>
+        <div><div class="agent-name">ECOMMERCE</div><div class="agent-role">Shopify Orders</div></div>
+      </div>
+      <div class="agent-status"><div class="status-dot idle"></div><span>Done</span></div>
+      <div class="progress-bar"><div class="progress-fill" style="width:100%;background:#10b981"></div></div>
+    </div>
+
+    <div class="agent-card" data-id="5">
+      <div class="agent-card-header">
+        <span class="agent-icon">▶️</span>
+        <div><div class="agent-name">YT PIPELINE</div><div class="agent-role">YouTube Stats</div></div>
+      </div>
+      <div class="agent-status"><div class="status-dot idle"></div><span>Waiting</span></div>
+      <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+    </div>
+
+    <div class="sidebar-section-title" style="margin-top:8px">System</div>
+    <div style="font-size:10px; color:var(--dim); line-height:1.8;">
+      <div style="display:flex;justify-content:space-between;"><span>Model</span><span style="color:var(--accent)">sonnet-4-6</span></div>
+      <div style="display:flex;justify-content:space-between;"><span>Memory</span><span style="color:var(--accent3)">2.1 MB</span></div>
+      <div style="display:flex;justify-content:space-between;"><span>Uptime</span><span id="uptime">00:00:00</span></div>
+    </div>
+  </div>
+
+  <!-- CENTER: ISOMETRIC WORLD -->
+  <div class="iso-area">
+    <canvas id="isoCanvas"></canvas>
+
+    <div class="hud-corner">
+      <h4>Active Agent</h4>
+      <div class="hud-row"><span>Name</span><span id="hudName">VIDEO SCRIPT</span></div>
+      <div class="hud-row"><span>Task</span><span id="hudTask">Gen script</span></div>
+      <div class="hud-row"><span>Step</span><span id="hudStep">2 / 4</span></div>
+      <div class="hud-row"><span>Model</span><span>claude-sonnet-4-6</span></div>
+    </div>
+
+    <div class="hud-log">
+      <h4>Activity Log</h4>
+      <div class="log-lines" id="logLines">
+        <div class="log-line"><span class="log-time">13:12:04</span><span class="log-msg highlight">[VIDEO] Claude API call initiated</span></div>
+        <div class="log-line"><span class="log-time">13:12:01</span><span class="log-msg">[MEMORY] video_scripts.json opened for write</span></div>
+        <div class="log-line"><span class="log-time">13:11:58</span><span class="log-msg">[LEADS] 8 new leads pulled from GHL</span></div>
+      </div>
+    </div>
+
+    <div class="tooltip" id="tooltip">
+      <div class="tooltip-name" id="ttName">ROBOT-01</div>
+      <div class="tooltip-task" id="ttTask">Generating script…</div>
+    </div>
+  </div>
+
+  <!-- RIGHT SIDEBAR: TASK QUEUE -->
+  <div class="sidebar-right">
+    <div class="sidebar-section-title">Task Queue</div>
+
+    <div class="task-item running">
+      <div class="task-header">
+        <span class="task-name">Generate Script</span>
+        <span class="task-badge badge-running">Running</span>
+      </div>
+      <div class="task-desc">claude-sonnet-4-6 — 60s love story, cinematic, plot twist, ≤150 words.</div>
+      <div class="task-progress"><div class="task-progress-fill fill-cyan" id="tp0" style="width:68%"></div></div>
+    </div>
+
+    <div class="task-item">
+      <div class="task-header">
+        <span class="task-name">ElevenLabs TTS</span>
+        <span class="task-badge badge-queued" id="badge1">Queued</span>
+      </div>
+      <div class="task-desc">Convert voiceover text → MP3. Awaiting script completion.</div>
+      <div class="task-progress"><div class="task-progress-fill fill-purple" id="tp1" style="width:0%"></div></div>
+    </div>
+
+    <div class="task-item done">
+      <div class="task-header">
+        <span class="task-name">Save Memory</span>
+        <span class="task-badge badge-done">Done</span>
+      </div>
+      <div class="task-desc">memory.json + video_scripts.json updated.</div>
+      <div class="task-progress"><div class="task-progress-fill fill-green" style="width:100%"></div></div>
+    </div>
+
+    <div class="task-item running">
+      <div class="task-header">
+        <span class="task-name">Lead Monitor</span>
+        <span class="task-badge badge-running">Running</span>
+      </div>
+      <div class="task-desc">Pulling new leads from GoHighLevel CRM.</div>
+      <div class="task-progress"><div class="task-progress-fill fill-cyan" id="tp3" style="width:75%"></div></div>
+    </div>
+
+    <div class="sidebar-section-title">Output</div>
+    <div class="output-panel">
+      <div class="output-line"><span class="prefix">&gt;</span> Jarvis agents initializing…</div>
+      <div class="output-line"><span class="prefix">&gt;</span> <span class="ok">ANTHROPIC_API_KEY found</span></div>
+      <div class="output-line"><span class="prefix">&gt;</span> Calling claude-sonnet-4-6…</div>
+      <div class="output-line"><span class="prefix">&gt;</span> <span class="warn">ELEVENLABS_API_KEY not set</span></div>
+      <div class="output-line"><span class="prefix">&gt;</span> Awaiting response…<span id="blink">▌</span></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── CLOCK & UPTIME ────────────────────────────────────────────
+const startTime = Date.now();
+function tick() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toTimeString().slice(0,8);
+  const s = Math.floor((Date.now() - startTime) / 1000);
+  document.getElementById('uptime').textContent =
+    `${String(Math.floor(s/3600)).padStart(2,'0')}:${String(Math.floor((s%3600)/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+}
+setInterval(tick, 1000); tick();
+
+// ── BLINK ─────────────────────────────────────────────────────
+let blinkOn = true;
+setInterval(() => {
+  const b = document.getElementById('blink');
+  if (b) b.style.opacity = (blinkOn = !blinkOn) ? '1' : '0';
+}, 500);
+
+// ── ISO ENGINE ────────────────────────────────────────────────
+const canvas = document.getElementById('isoCanvas');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  const area = canvas.parentElement;
+  canvas.width = area.clientWidth;
+  canvas.height = area.clientHeight - 140;
+}
+resize();
+window.addEventListener('resize', () => { resize(); });
+
+function toIso(x, y) {
+  const cx = canvas.width / 2, cy = canvas.height * 0.42;
+  const tw = 56, th = 28;
+  return { sx: cx + (x - y) * (tw / 2), sy: cy + (x + y) * (th / 2) };
+}
+
+const GRID_W = 10, GRID_H = 10;
+const buildingMap = [
+  [1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,2,0,0,2,0,0,1],
+  [1,0,0,0,0,0,0,0,0,1],
+  [1,2,0,0,3,3,0,0,2,1],
+  [1,0,0,0,3,3,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,1],
+  [1,2,0,0,0,0,0,0,2,1],
+  [1,0,0,0,0,0,0,0,0,1],
+  [1,0,0,2,0,0,2,0,0,1],
+  [1,1,1,4,1,1,4,1,1,1],
+];
+
+const TILE_COLORS = {
+  floor:  { top: '#1e2a42', left: '#141c2e', right: '#0f1828' },
+  wall:   { top: '#0d1117', left: '#0a0d14', right: '#080b11' },
+  desk:   { top: '#1a3a4a', left: '#0e2535', right: '#091e2a' },
+  server: { top: '#1a1535', left: '#110e25', right: '#0d0b1e' },
+  door:   { top: '#2a1a0a', left: '#1c1106', right: '#150d04' },
+};
+
+function tileTypeAt(gx, gy) {
+  return ['floor','wall','desk','server','door'][buildingMap[gy]?.[gx] ?? 1] || 'wall';
+}
+
+const TILE_H_PX = 20;
+
+function drawTile(gx, gy, type) {
+  const c = TILE_COLORS[type];
+  const {sx, sy} = toIso(gx, gy);
+  const tw = 56, th = 28, e = TILE_H_PX;
+
+  ctx.strokeStyle = 'rgba(0,212,255,0.07)';
+  ctx.lineWidth = 0.5;
+
+  ctx.beginPath();
+  ctx.moveTo(sx, sy-e); ctx.lineTo(sx+tw/2, sy+th/2-e);
+  ctx.lineTo(sx, sy+th-e); ctx.lineTo(sx-tw/2, sy+th/2-e);
+  ctx.closePath(); ctx.fillStyle = c.top; ctx.fill(); ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(0,212,255,0.05)';
+  ctx.beginPath();
+  ctx.moveTo(sx-tw/2, sy+th/2-e); ctx.lineTo(sx, sy+th-e);
+  ctx.lineTo(sx, sy+th); ctx.lineTo(sx-tw/2, sy+th/2);
+  ctx.closePath(); ctx.fillStyle = c.left; ctx.fill(); ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(0,212,255,0.04)';
+  ctx.beginPath();
+  ctx.moveTo(sx, sy+th-e); ctx.lineTo(sx+tw/2, sy+th/2-e);
+  ctx.lineTo(sx+tw/2, sy+th/2); ctx.lineTo(sx, sy+th);
+  ctx.closePath(); ctx.fillStyle = c.right; ctx.fill(); ctx.stroke();
+
+  if (type === 'desk' || type === 'server') {
+    ctx.beginPath();
+    ctx.moveTo(sx, sy-e); ctx.lineTo(sx+tw/2, sy+th/2-e);
+    ctx.lineTo(sx, sy+th-e); ctx.lineTo(sx-tw/2, sy+th/2-e);
+    ctx.closePath();
+    ctx.fillStyle = type === 'server' ? 'rgba(124,58,237,0.15)' : 'rgba(0,212,255,0.08)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(sx, sy+th/2-e, 3, 0, Math.PI*2);
+    ctx.fillStyle = type === 'server' ? '#7c3aed' : '#00d4ff';
+    ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 8;
+    ctx.fill(); ctx.shadowBlur = 0;
+  }
+}
+
+// ── ROBOTS ────────────────────────────────────────────────────
+const AGENT_DEFS = [
+  { id:0, name:'VIDEO',      color:'#00d4ff', emoji:'🎬', task:'Generating script…' },
+  { id:1, name:'INCOME',     color:'#7c3aed', emoji:'📊', task:'Standing by' },
+  { id:2, name:'COMMISSION', color:'#f59e0b', emoji:'💰', task:'Parsing emails…' },
+  { id:3, name:'LEADS',      color:'#10b981', emoji:'📋', task:'Pulling from GHL…' },
+  { id:4, name:'ECOMMERCE',  color:'#f43f5e', emoji:'🛒', task:'Done' },
+  { id:5, name:'YT PIPE',    color:'#a78bfa', emoji:'▶️', task:'Waiting' },
+];
+
+const WAYPOINTS = [
+  [[2,2],[5,2],[5,5],[2,5],[2,2]],
+  [[1,7],[3,7],[3,8],[1,8],[1,7]],
+  [[7,2],[8,3],[8,5],[7,6],[7,2]],
+  [[4,3],[5,4],[4,4],[5,3],[4,3]],
+  [[6,7],[7,8],[8,7],[7,6],[6,7]],
+  [[1,2],[2,3],[1,4],[2,5],[1,2]],
+];
+
+const robots = AGENT_DEFS.map((def, i) => ({
+  ...def,
+  fx: WAYPOINTS[i][0][0], fy: WAYPOINTS[i][0][1],
+  waypointIdx: 0,
+  waypoints: WAYPOINTS[i],
+  speed: 0.012 + i * 0.0015,
+  bobOffset: i * Math.PI * 0.4,
+}));
+
+function drawRobot(robot, t) {
+  const {sx, sy} = toIso(robot.fx, robot.fy);
+  const bob = Math.sin(t * 2.5 + robot.bobOffset) * 3;
+  const py = sy - TILE_H_PX - 10 + bob;
+
+  ctx.beginPath();
+  ctx.ellipse(sx, sy - TILE_H_PX + 4, 10, 5, 0, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill();
+
+  ctx.fillStyle = robot.color;
+  ctx.shadowColor = robot.color; ctx.shadowBlur = 12;
+  ctx.beginPath(); ctx.roundRect(sx-7, py-12, 14, 16, 3); ctx.fill();
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = robot.color;
+  ctx.shadowColor = robot.color; ctx.shadowBlur = 8;
+  ctx.beginPath(); ctx.roundRect(sx-5, py-22, 10, 10, 2); ctx.fill();
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = '#fff';
+  ctx.shadowColor = '#fff'; ctx.shadowBlur = 6;
+  ctx.beginPath();
+  ctx.arc(sx-2.5, py-18, 1.8, 0, Math.PI*2);
+  ctx.arc(sx+2.5, py-18, 1.8, 0, Math.PI*2);
+  ctx.fill(); ctx.shadowBlur = 0;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.beginPath(); ctx.roundRect(sx-4, py-10, 8, 6, 1); ctx.fill();
+
+  const led = Math.sin(t * 4 + robot.bobOffset) > 0;
+  ctx.fillStyle = led ? robot.color : 'rgba(255,255,255,0.3)';
+  ctx.shadowColor = robot.color; ctx.shadowBlur = led ? 6 : 0;
+  ctx.beginPath(); ctx.arc(sx, py-7, 1.5, 0, Math.PI*2); ctx.fill();
+  ctx.shadowBlur = 0;
+
+  ctx.font = '7px Courier New';
+  ctx.fillStyle = robot.color;
+  ctx.textAlign = 'center';
+  ctx.fillText(robot.name, sx, py-26);
+  ctx.textAlign = 'left';
+}
+
+// ── ANIMATION LOOP ────────────────────────────────────────────
+let lastTime = 0;
+function frame(timestamp) {
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+  lastTime = timestamp;
+  const t = timestamp / 1000;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (let y = 0; y < GRID_H; y++)
+    for (let x = 0; x < GRID_W; x++)
+      drawTile(x, y, tileTypeAt(x, y));
+
+  const {sx: sx4, sy: sy4} = toIso(4, 3);
+  const grad = ctx.createRadialGradient(sx4, sy4-30, 5, sx4, sy4-30, 60);
+  grad.addColorStop(0, 'rgba(124,58,237,0.18)');
+  grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad;
+  ctx.fillRect(sx4-70, sy4-80, 140, 100);
+
+  robots.forEach(robot => {
+    const target = robot.waypoints[robot.waypointIdx];
+    const dx = target[0] - robot.fx, dy = target[1] - robot.fy;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < 0.05) {
+      robot.waypointIdx = (robot.waypointIdx + 1) % robot.waypoints.length;
+    } else {
+      robot.fx += (dx/dist) * robot.speed * 60 * dt;
+      robot.fy += (dy/dist) * robot.speed * 60 * dt;
+    }
+    drawRobot(robot, t);
+  });
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ── ANIMATED PROGRESS ─────────────────────────────────────────
+let p0 = 68, p2 = 41, p3 = 75;
+setInterval(() => {
+  p0 = Math.min(100, p0 + Math.random() * 2);
+  p2 = Math.min(100, p2 + Math.random() * 1.2);
+  p3 = Math.min(100, p3 + Math.random() * 1.8);
+  const e = (id, v) => { const el = document.getElementById(id); if (el) el.style.width = v + '%'; };
+  e('pb0', p0); e('tp0', p0); e('pb2', p2); e('tp3', p3); e('pb3', p3);
+  if (p0 >= 100) {
+    document.querySelector('[data-id="0"] .status-dot').className = 'status-dot processing';
+    document.querySelector('[data-id="0"] .agent-status span').textContent = 'Calling ElevenLabs…';
+    e('tp1', 35);
+    const b = document.getElementById('badge1');
+    if (b) { b.className = 'task-badge badge-running'; b.textContent = 'Running'; }
+    document.getElementById('statTasks').textContent = '4';
+  }
+}, 800);
+
+// ── LOG MESSAGES ──────────────────────────────────────────────
+const LOGS = [
+  { msg: '[VIDEO] Script generation complete',          cls: 'highlight' },
+  { msg: '[AUDIO] ElevenLabs API call started',         cls: '' },
+  { msg: '[MEMORY] memory/video_scripts.json saved',    cls: 'highlight' },
+  { msg: '[VIDEO] voiceover_*.mp3 written to outputs/', cls: '' },
+  { msg: '[LEADS] 12/14 leads scored — continuing…',   cls: '' },
+  { msg: '[MEMORY] memory.json updated',                cls: 'highlight' },
+  { msg: '[VIDEO] run() returned summary string',       cls: 'highlight' },
+];
+let logIdx = 0;
+function pushLog() {
+  if (logIdx >= LOGS.length) return;
+  const e = LOGS[logIdx++];
+  const now = new Date().toTimeString().slice(0,8);
+  const lines = document.getElementById('logLines');
+  const div = document.createElement('div');
+  div.className = 'log-line';
+  div.innerHTML = `<span class="log-time">${now}</span><span class="log-msg ${e.cls}">${e.msg}</span>`;
+  lines.prepend(div);
+  if (lines.children.length > 3) lines.removeChild(lines.lastChild);
+}
+[4000,7500,10000,14000,19000,24000,30000].forEach((ms, i) => setTimeout(pushLog, ms));
+
+// ── TOOLTIP ───────────────────────────────────────────────────
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const tt = document.getElementById('tooltip');
+  let found = false;
+  robots.forEach(robot => {
+    const {sx, sy} = toIso(robot.fx, robot.fy);
+    const py = sy - TILE_H_PX - 10;
+    if (Math.abs(mx - sx) < 14 && Math.abs(my - py) < 24) {
+      document.getElementById('ttName').textContent = robot.emoji + ' ' + robot.name;
+      document.getElementById('ttTask').textContent = robot.task;
+      tt.style.left = (mx + 14) + 'px';
+      tt.style.top = (my - 10) + 'px';
+      tt.classList.add('visible');
+      found = true;
+    }
+  });
+  if (!found) tt.classList.remove('visible');
+});
+
+// ── SIDEBAR CLICK ─────────────────────────────────────────────
+document.querySelectorAll('.agent-card').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+    const id = parseInt(card.dataset.id);
+    const def = AGENT_DEFS[id];
+    document.getElementById('hudName').textContent = def.name;
+    document.getElementById('hudTask').textContent = def.task;
+    document.getElementById('hudStep').textContent = `${id+1} / ${AGENT_DEFS.length}`;
+  });
+});
+
+// ── TOKEN COUNTER ─────────────────────────────────────────────
+let tokens = 47200;
+setInterval(() => {
+  tokens += Math.floor(Math.random() * 800);
+  document.getElementById('statTokens').textContent = (tokens/1000).toFixed(1) + 'k';
+}, 3200);
+</script>
+</body>
+</html>

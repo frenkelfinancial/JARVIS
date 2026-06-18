@@ -9,6 +9,7 @@ _DEFAULTS = {
     "video_pipeline": {"last_run": None, "last_output": None, "data": {}},
     "lead_monitor": {"last_run": None, "last_output": None, "data": {}},
     "ecommerce": {"last_run": None, "last_output": None, "data": {}},
+    "video_script": {"last_run": None, "last_output": None, "data": {}},
 }
 
 
